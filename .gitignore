@@ -1,0 +1,5 @@
+/situation-monitor
+*.exe
+/data/
+.env
+*.db

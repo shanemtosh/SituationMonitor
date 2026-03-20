@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Briefings — Situation Monitor</title>
+	<style>
+		:root { color-scheme: dark light; --bg: #fff; --fg: #111; --dim: #888; --border: #ddd; --item-border: #eee; }
+		* { box-sizing: border-box; margin: 0; padding: 0; }
+		body {
+			font-family: system-ui, -apple-system, sans-serif;
+			line-height: 1.5;
+			padding: 1rem 1rem 4rem;
+			max-width: 720px;
+			margin: 0 auto;
+			min-height: 100dvh;
+			background: var(--bg);
+			color: var(--fg);
+		}
+		body.dark { --bg: #111; --fg: #e8e8e8; --dim: #777; --border: #333; --item-border: #222; }
+		nav {
+			display: flex;
+			gap: 0.75rem;
+			align-items: center;
+			font-size: 0.85rem;
+			padding: 0.5rem 0 1rem;
+			border-bottom: 1px solid var(--border);
+			margin-bottom: 1.25rem;
+		}
+		nav a { text-decoration: none; color: inherit; opacity: 0.6; }
+		nav a:hover { opacity: 1; }
+		nav .active { opacity: 1; font-weight: 600; }
+		.nav-spacer { flex: 1; }
+		.theme-btn {
+			background: none; border: none; cursor: pointer;
+			padding: 0.25rem; opacity: 0.5;
+			color: inherit; display: flex; align-items: center;
+		}
+		.theme-btn:hover { opacity: 1; }
+		.theme-btn svg { width: 16px; height: 16px; fill: currentColor; }
+		h1 { font-size: 1.25rem; margin-bottom: 1.5rem; }
+		ul { list-style: none; }
+		li { border-bottom: 1px solid var(--item-border); }
+		li a {
+			display: block;
+			padding: 0.75rem 0;
+			text-decoration: none;
+			color: inherit;
+			font-weight: 600;
+			font-size: 1rem;
+		}
+		li a:hover { opacity: 0.7; }
+		.empty { color: var(--dim); font-style: italic; font-size: 0.9rem; padding: 1rem 0; }
+		@media (prefers-color-scheme: dark) {
+			:root:not(.light-forced) { --bg: #111; --fg: #e8e8e8; --dim: #777; --border: #333; --item-border: #222; }
+		}
+	</style>
+</head>
+<body>
+	<nav>
+		<a href="/">Feed</a>
+		<a href="/daily/" class="active">Briefings</a>
+		<span class="nav-spacer"></span>
+		<button class="theme-btn" id="theme-toggle"></button>
+	</nav>
+
+	<h1>Daily Briefings</h1>
+	{{if .}}
+	<ul>
+		{{range .}}<li><a href="{{.URL}}">{{.Date}}</a></li>{{end}}
+	</ul>
+	{{else}}
+	<p class="empty">No briefings generated yet.</p>
+	{{end}}
+
+	<script>
+	(function(){
+		var SUN = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+		var MOON = '<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>';
+		var themeBtn = document.getElementById('theme-toggle');
+		var stored = localStorage.getItem('sm-theme');
+		function isDark(mode) {
+			return mode === 'dark' || (!mode && window.matchMedia('(prefers-color-scheme:dark)').matches);
+		}
+		function applyTheme(mode) {
+			if (mode === 'dark') {
+				document.body.classList.add('dark');
+				document.documentElement.classList.add('light-forced');
+			} else if (mode === 'light') {
+				document.body.classList.remove('dark');
+				document.documentElement.classList.add('light-forced');
+			} else {
+				document.body.classList.remove('dark');
+				document.documentElement.classList.remove('light-forced');
+			}
+			themeBtn.innerHTML = isDark(mode) ? SUN : MOON;
+		}
+		applyTheme(stored);
+		themeBtn.addEventListener('click', function(){
+			var next = isDark(stored) ? 'light' : 'dark';
+			localStorage.setItem('sm-theme', next);
+			stored = next;
+			applyTheme(next);
+		});
+	})();
+	</script>
+</body>
+</html>

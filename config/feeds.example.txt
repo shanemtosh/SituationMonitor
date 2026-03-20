@@ -1,0 +1,8 @@
+# One RSS or Atom URL per line. Copy to feeds.txt and edit.
+# Many outlets publish English world desks; add non‑English feeds for sources you read (translation comes later).
+
+https://feeds.bbci.co.uk/news/world/rss.xml
+https://rss.nytimes.com/services/xml/rss/nyt/World.xml
+https://www.theguardian.com/world/rss
+https://rss.dw.com/rdf/rss-en-world
+https://www.france24.com/en/rss

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Situation Briefing — {{.Date}}</title>
+	<style>
+		:root { color-scheme: dark light; --bg: #fff; --fg: #111; --dim: #888; --dim2: #555; --border: #ddd; --exec-bg: transparent; --exec-border: #d44; --link: #0b5fff; }
+		* { box-sizing: border-box; margin: 0; padding: 0; }
+		body {
+			font-family: system-ui, -apple-system, sans-serif;
+			line-height: 1.55;
+			padding: 1rem 1rem 4rem;
+			max-width: 720px;
+			margin: 0 auto;
+			min-height: 100dvh;
+			background: var(--bg);
+			color: var(--fg);
+		}
+		body.dark { --bg: #111; --fg: #e8e8e8; --dim: #777; --dim2: #9aa; --border: #333; --exec-bg: #1a1111; --exec-border: #c44; --link: #6af; }
+		nav {
+			display: flex;
+			gap: 0.75rem;
+			align-items: center;
+			font-size: 0.85rem;
+			padding: 0.5rem 0 1rem;
+			border-bottom: 1px solid var(--border);
+			margin-bottom: 1.25rem;
+		}
+		nav a { text-decoration: none; color: inherit; opacity: 0.6; }
+		nav a:hover { opacity: 1; }
+		.nav-spacer { flex: 1; }
+		.theme-btn {
+			background: none; border: none; cursor: pointer;
+			padding: 0.25rem; opacity: 0.5;
+			color: inherit; display: flex; align-items: center;
+		}
+		.theme-btn:hover { opacity: 1; }
+		.theme-btn svg { width: 16px; height: 16px; fill: currentColor; }
+		header { margin-bottom: 2rem; }
+		header h1 { font-size: 1.3rem; margin-bottom: 0.25rem; }
+		header time { font-size: 0.85rem; color: var(--dim); }
+		.exec-summary {
+			border-left: 3px solid var(--exec-border);
+			background: var(--exec-bg);
+			padding: 0.75rem 1rem;
+			margin-bottom: 2rem;
+			font-size: 0.95rem;
+			line-height: 1.6;
+		}
+		section { margin-bottom: 2.5rem; }
+		h2 {
+			font-size: 0.8rem;
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+			color: var(--dim);
+			margin-bottom: 0.75rem;
+		}
+		article { margin-bottom: 1.75rem; }
+		article h3 { font-size: 1rem; margin-bottom: 0.35rem; }
+		article p { font-size: 0.92rem; margin-bottom: 0.5rem; }
+		.urgency {
+			display: inline-block;
+			font-size: 0.7rem;
+			font-weight: 700;
+			padding: 0.1rem 0.4rem;
+			border-radius: 3px;
+			vertical-align: middle;
+			margin-right: 0.25rem;
+		}
+		.u5 { background: #d44; color: #fff; }
+		.u4 { background: #e87; color: #fff; }
+		.u3 { background: #da3; color: #111; }
+		.u2 { background: #8b8; color: #111; }
+		.why { font-style: italic; font-size: 0.88rem; color: var(--dim2); margin-bottom: 0.5rem; }
+		.source-link { font-size: 0.8rem; color: var(--link); }
+		.market-table {
+			width: 100%;
+			border-collapse: collapse;
+			font-size: 0.88rem;
+			margin-bottom: 1rem;
+		}
+		.market-table th, .market-table td {
+			text-align: left;
+			padding: 0.4rem 0.5rem;
+			border-bottom: 1px solid var(--border);
+		}
+		.market-table th { font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; }
+		.neg { color: #d44; }
+		.pos { color: #2a5; }
+		.watchlist li {
+			margin-bottom: 0.75rem;
+			font-size: 0.92rem;
+			list-style: none;
+			padding-left: 1.2rem;
+			position: relative;
+		}
+		.watchlist li::before {
+			content: "\2192";
+			position: absolute;
+			left: 0;
+		}
+		.sources-list { font-size: 0.82rem; line-height: 1.7; padding-left: 1.5rem; }
+		.sources-list li { margin-bottom: 0.25rem; }
+		a { color: var(--link); }
+		footer { font-size: 0.78rem; color: var(--dim); margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+
+		@media (prefers-color-scheme: dark) {
+			:root:not(.light-forced) { --bg: #111; --fg: #e8e8e8; --dim: #777; --dim2: #9aa; --border: #333; --exec-bg: #1a1111; --exec-border: #c44; --link: #6af; }
+		}
+		@media print { nav { display: none; } body { padding: 0; } }
+	</style>
+</head>
+<body>
+	<nav>
+		<a href="/">Feed</a>
+		<a href="/daily/">Briefings</a>
+		<span class="nav-spacer"></span>
+		<button class="theme-btn" id="theme-toggle"></button>
+	</nav>
+
+	<header>
+		<h1>Situation Briefing</h1>
+		<time datetime="{{.Date}}">{{.Weekday}}, {{.Date}}</time>
+	</header>
+
+	<div class="exec-summary">
+		<strong>Bottom line:</strong> {{.Summary}}
+	</div>
+
+	{{if .Markets.Instruments}}
+	<section>
+		<h2>Markets Snapshot</h2>
+		<table class="market-table">
+			<thead><tr><th>Instrument</th><th>Price</th><th>Move</th></tr></thead>
+			<tbody>
+			{{range .Markets.Instruments}}
+				<tr>
+					<td>{{.Name}}</td>
+					<td>{{.Price}}</td>
+					<td class="{{.Direction}}">{{.Move}}</td>
+				</tr>
+			{{end}}
+			</tbody>
+		</table>
+		{{if .Markets.Narrative}}<p style="font-size:0.88rem;">{{.Markets.Narrative}}</p>{{end}}
+	</section>
+	{{end}}
+
+	{{if .Stories}}
+	<section>
+		<h2>Top Stories</h2>
+		{{range .Stories}}
+		<article>
+			<h3><span class="urgency u{{.Urgency}}">{{.UrgencyLabel}}</span> {{.Title}}</h3>
+			<p>{{.Body}}</p>
+			{{if .Body2}}<p>{{.Body2}}</p>{{end}}
+			{{if .Why}}<p class="why">Why it matters: {{.Why}}</p>{{end}}
+			{{if .Sources}}{{range $i, $s := .Sources}}{{if $i}} · {{end}}<a class="source-link" href="{{$s.URL}}">{{$s.Name}}</a>{{end}}{{end}}
+		</article>
+		{{end}}
+	</section>
+	{{end}}
+
+	{{if .Themes}}
+	<section>
+		<h2>Emerging Themes</h2>
+		{{range .Themes}}
+		<article>
+			<h3>{{.Title}}</h3>
+			<p>{{.Body}}</p>
+		</article>
+		{{end}}
+	</section>
+	{{end}}
+
+	{{if .Social}}
+	<section>
+		<h2>X / Social Signals</h2>
+		<p style="font-size:0.92rem;">{{.Social}}</p>
+	</section>
+	{{end}}
+
+	{{if .Watchlist}}
+	<section>
+		<h2>Watchlist — Next 24–48 Hours</h2>
+		<ul class="watchlist">
+			{{range .Watchlist}}
+			<li><strong>{{.Title}}:</strong> {{.Body}}</li>
+			{{end}}
+		</ul>
+	</section>
+	{{end}}
+
+	{{if .AllSources}}
+	<section>
+		<h2>Sources</h2>
+		<ol class="sources-list">
+			{{range .AllSources}}
+			<li><a href="{{.URL}}">{{.Name}} — {{.Title}}</a></li>
+			{{end}}
+		</ol>
+	</section>
+	{{end}}
+
+	<footer>
+		Generated by Claude · <time datetime="{{.Date}}">{{.Date}}</time> · <a href="/">Situation Monitor</a>
+	</footer>
+
+	<script>
+	(function(){
+		var SUN='<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+		var MOON='<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>';
+		var b=document.getElementById('theme-toggle'),s=localStorage.getItem('sm-theme');
+		function d(m){return m==='dark'||(!m&&window.matchMedia('(prefers-color-scheme:dark)').matches)}
+		function a(m){if(m==='dark'){document.body.classList.add('dark');document.documentElement.classList.add('light-forced')}else if(m==='light'){document.body.classList.remove('dark');document.documentElement.classList.add('light-forced')}else{document.body.classList.remove('dark');document.documentElement.classList.remove('light-forced')}b.innerHTML=d(m)?SUN:MOON}
+		a(s);b.addEventListener('click',function(){var n=d(s)?'light':'dark';localStorage.setItem('sm-theme',n);s=n;a(n)});
+	})();
+	</script>
+</body>
+</html>

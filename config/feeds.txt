@@ -1,0 +1,4 @@
+# Default starter feeds (same as feeds.example.txt). Replace with your own list.
+https://feeds.bbci.co.uk/news/world/rss.xml
+https://rss.nytimes.com/services/xml/rss/nyt/World.xml
+https://www.theguardian.com/world/rss

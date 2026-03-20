@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Situation Monitor</title>
+	<style>
+		:root { color-scheme: dark light; --bg: #fff; --fg: #111; --dim: #888; --border: #ddd; --card-border: #ddd; --item-border: #eee; --tag-bg: #eee; --hover-bg: rgba(128,128,128,0.1); }
+		* { box-sizing: border-box; margin: 0; padding: 0; }
+		body {
+			font-family: system-ui, -apple-system, sans-serif;
+			line-height: 1.5;
+			padding: 1rem 1rem 4rem;
+			max-width: 720px;
+			margin: 0 auto;
+			min-height: 100dvh;
+			background: var(--bg);
+			color: var(--fg);
+		}
+		body.dark { --bg: #111; --fg: #e8e8e8; --dim: #777; --border: #333; --card-border: #333; --item-border: #222; --tag-bg: #2a2a2a; --hover-bg: rgba(255,255,255,0.05); }
+
+		/* Nav */
+		nav {
+			display: flex;
+			gap: 0.75rem;
+			align-items: center;
+			font-size: 0.85rem;
+			padding: 0.5rem 0 1rem;
+			border-bottom: 1px solid var(--border);
+			margin-bottom: 1.25rem;
+			flex-wrap: wrap;
+		}
+		nav a { text-decoration: none; color: inherit; opacity: 0.6; }
+		nav a:hover { opacity: 1; }
+		nav .active { opacity: 1; font-weight: 600; }
+		.nav-spacer { flex: 1; }
+		.theme-btn {
+			background: none; border: none; cursor: pointer;
+			padding: 0.25rem; opacity: 0.5;
+			color: inherit; display: flex; align-items: center;
+		}
+		.theme-btn:hover { opacity: 1; }
+		.theme-btn svg { width: 16px; height: 16px; fill: currentColor; }
+
+		/* Header */
+		h1 { font-size: 1.25rem; margin-bottom: 0.25rem; }
+		.today-link {
+			display: inline-block;
+			font-size: 0.85rem;
+			text-decoration: none;
+			color: var(--dim);
+			margin-bottom: 1.5rem;
+			transition: color 0.15s;
+		}
+		.today-link:hover { color: var(--fg); }
+		.today-link.unavailable { opacity: 0.4; pointer-events: none; }
+
+		section { margin-bottom: 2rem; }
+		h2 {
+			font-size: 0.8rem;
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+			color: var(--dim);
+			margin-bottom: 0.75rem;
+		}
+
+		/* Markets — compact card row */
+		.markets {
+			display: flex;
+			gap: 0.5rem;
+			overflow-x: auto;
+			padding-bottom: 0.25rem;
+			-webkit-overflow-scrolling: touch;
+		}
+		.mkt-card {
+			flex: 0 0 auto;
+			min-width: 6rem;
+			padding: 0.5rem 0.65rem;
+			border: 1px solid var(--card-border);
+			border-radius: 6px;
+			font-size: 0.82rem;
+		}
+		.mkt-card .sym { font-weight: 700; font-size: 0.85rem; }
+		.mkt-card .price { margin-top: 0.15rem; }
+		.mkt-card .chg { font-size: 0.78rem; font-weight: 600; }
+		.neg { color: #d44; }
+		.pos { color: #2a5; }
+
+		/* Filters — collapsed by default */
+		.filter-toggle {
+			display: inline-flex;
+			align-items: center;
+			gap: 0.35rem;
+			font-size: 0.82rem;
+			color: var(--dim);
+			background: none;
+			border: 1px solid var(--border);
+			border-radius: 4px;
+			padding: 0.3rem 0.6rem;
+			cursor: pointer;
+			margin-bottom: 0.75rem;
+			font-family: inherit;
+		}
+		.filter-toggle:hover { color: var(--fg); border-color: var(--dim); }
+		.filters {
+			display: none;
+			flex-wrap: wrap;
+			gap: 0.5rem;
+			align-items: end;
+			margin-bottom: 1rem;
+			font-size: 0.85rem;
+		}
+		.filters.open { display: flex; }
+		.filters label {
+			display: flex;
+			flex-direction: column;
+			gap: 0.15rem;
+			font-size: 0.78rem;
+			color: var(--dim);
+		}
+		.filters input, .filters select {
+			font: inherit;
+			font-size: 0.85rem;
+			padding: 0.3rem 0.4rem;
+			border: 1px solid var(--border);
+			border-radius: 4px;
+			background: transparent;
+			color: inherit;
+			width: 5.5rem;
+		}
+		.filters select { width: auto; }
+		.filters button {
+			font: inherit;
+			font-size: 0.82rem;
+			padding: 0.3rem 0.75rem;
+			border: 1px solid var(--border);
+			border-radius: 4px;
+			background: transparent;
+			color: inherit;
+			cursor: pointer;
+		}
+		.filters button:hover { background: var(--hover-bg); }
+
+		/* Items — card list */
+		.item-list { list-style: none; }
+		.item {
+			padding: 0.6rem 0;
+			border-bottom: 1px solid var(--item-border);
+		}
+		.item-title {
+			font-size: 0.92rem;
+			line-height: 1.4;
+		}
+		.item-title a { color: inherit; text-decoration: none; }
+		.item-title a:hover { text-decoration: underline; }
+		.item-meta {
+			display: flex;
+			gap: 0.5rem;
+			align-items: center;
+			margin-top: 0.2rem;
+			font-size: 0.75rem;
+			color: var(--dim);
+			flex-wrap: wrap;
+		}
+		.urgency-dot {
+			display: inline-block;
+			width: 7px;
+			height: 7px;
+			border-radius: 50%;
+			flex-shrink: 0;
+		}
+		.u5 { background: #d44; }
+		.u4 { background: #e87; }
+		.u3 { background: #da3; }
+		.u2 { background: #8b8; }
+		.u1 { background: #888; }
+		.tag {
+			display: inline-block;
+			background: var(--tag-bg);
+			border-radius: 3px;
+			padding: 0 0.3rem;
+			font-size: 0.72rem;
+		}
+		.empty { color: var(--dim); font-style: italic; font-size: 0.9rem; padding: 1rem 0; }
+
+		/* Refresh indicator */
+		.refresh-bar {
+			position: fixed;
+			top: 0; left: 0; right: 0;
+			height: 2px;
+			background: #6af;
+			transform: scaleX(0);
+			transform-origin: left;
+			transition: transform 0.3s ease;
+			z-index: 100;
+		}
+		.refresh-bar.active { animation: refresh-sweep 1s ease-in-out; }
+		@keyframes refresh-sweep {
+			0% { transform: scaleX(0); }
+			50% { transform: scaleX(0.7); }
+			100% { transform: scaleX(1); opacity: 0; }
+		}
+
+		/* API links */
+		.api-links {
+			font-size: 0.75rem;
+			color: var(--dim);
+			padding-top: 1rem;
+			border-top: 1px solid var(--border);
+		}
+		.api-links a { color: var(--dim); margin-right: 0.75rem; }
+		.api-links a:hover { color: var(--fg); }
+
+		/* Auto-refresh disabled by dark mode override — keep same vars */
+		@media (prefers-color-scheme: dark) {
+			:root:not(.light-forced) { --bg: #111; --fg: #e8e8e8; --dim: #777; --border: #333; --card-border: #333; --item-border: #222; --tag-bg: #2a2a2a; --hover-bg: rgba(255,255,255,0.05); }
+		}
+	</style>
+</head>
+<body>
+	<div class="refresh-bar" id="refresh-bar"></div>
+	<nav>
+		<a href="/" class="active">Feed</a>
+		<a href="/daily/">Briefings</a>
+		<span class="nav-spacer"></span>
+		<button class="theme-btn" id="theme-toggle" title="Toggle theme"></button>
+	</nav>
+
+	<h1>Situation Monitor</h1>
+	<a href="#" id="today-briefing" class="today-link">Today's Briefing</a>
+
+	{{if .Quotes}}
+	<section>
+		<h2>Markets</h2>
+		<div class="markets">
+			{{range .Quotes}}
+			<div class="mkt-card">
+				<div class="sym">{{.Symbol}}</div>
+				<div class="price">{{printf "%.2f" .Price}}</div>
+				<div class="chg {{if lt .ChangePct 0.0}}neg{{else}}pos{{end}}">{{printf "%+.2f" .ChangePct}}%</div>
+			</div>
+			{{end}}
+		</div>
+	</section>
+	{{end}}
+
+	<section>
+		<h2>Headlines</h2>
+		<button class="filter-toggle" onclick="document.querySelector('.filters').classList.toggle('open')">Filters</button>
+		<form class="filters" method="get" action="/">
+			<label>Source <select name="source">
+				<option value="" {{if eq .Filter.SourceKind ""}}selected{{end}}>all</option>
+				<option value="rss" {{if eq .Filter.SourceKind "rss"}}selected{{end}}>rss</option>
+				<option value="sweep" {{if eq .Filter.SourceKind "sweep"}}selected{{end}}>sweep</option>
+			</select></label>
+			<label>Min urgency <input type="number" name="min_u" min="0" max="5" value="{{.Filter.MinUrgency}}"></label>
+			<label>Hours <input type="number" name="hours" min="0" max="720" value="{{.Filter.Hours}}"></label>
+			<label>Limit <input type="number" name="limit" min="1" max="500" value="{{.Filter.Limit}}"></label>
+			<button type="submit">Apply</button>
+		</form>
+		<ul class="item-list">
+			{{range .Items}}
+			<li class="item">
+				<div class="item-title">{{if .URL}}<a href="{{.URL}}" rel="noopener">{{end}}{{if .TitleTrans}}{{.TitleTrans}}{{else}}{{.Title}}{{end}}{{if .URL}}</a>{{end}}</div>
+				<div class="item-meta">
+					<span class="urgency-dot u{{.Urgency}}"></span>
+					<span>{{.SourceKind}}{{if .FeedName}} · {{.FeedName}}{{end}}</span>
+					<span>{{.CreatedAt}}</span>
+					{{range .Tags}}<span class="tag">{{.}}</span>{{end}}
+				</div>
+			</li>
+			{{else}}
+			<li class="empty">No items yet — check feeds, run a sweep, or widen filters.</li>
+			{{end}}
+		</ul>
+	</section>
+
+	<div class="api-links">
+		<a href="/api/items">items</a>
+		<a href="/api/markets">markets</a>
+		<a href="/api/sweeps">sweeps</a>
+		<a href="/health">health</a>
+	</div>
+
+	<script>
+	(function(){
+		// --- Today's briefing link (check if it exists) ---
+		var d = new Date();
+		var dateStr = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+		var briefingUrl = '/daily/' + dateStr;
+		var link = document.getElementById('today-briefing');
+		link.href = briefingUrl;
+		link.textContent = 'Briefing — ' + dateStr;
+		fetch(briefingUrl, {method:'HEAD'}).then(function(r){
+			if(!r.ok) {
+				link.textContent = 'No briefing yet today';
+				link.classList.add('unavailable');
+			}
+		}).catch(function(){});
+
+		// --- Dark mode toggle ---
+		var SUN = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+		var MOON = '<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>';
+		var themeBtn = document.getElementById('theme-toggle');
+		var stored = localStorage.getItem('sm-theme');
+		function isDark(mode) {
+			return mode === 'dark' || (!mode && window.matchMedia('(prefers-color-scheme:dark)').matches);
+		}
+		function applyTheme(mode) {
+			if (mode === 'dark') {
+				document.body.classList.add('dark');
+				document.documentElement.classList.add('light-forced');
+			} else if (mode === 'light') {
+				document.body.classList.remove('dark');
+				document.documentElement.classList.add('light-forced');
+			} else {
+				document.body.classList.remove('dark');
+				document.documentElement.classList.remove('light-forced');
+			}
+			themeBtn.innerHTML = isDark(mode) ? SUN : MOON;
+		}
+		applyTheme(stored);
+		themeBtn.addEventListener('click', function(){
+			var next = isDark(stored) ? 'light' : 'dark';
+			localStorage.setItem('sm-theme', next);
+			stored = next;
+			applyTheme(next);
+		});
+
+		// --- Auto-refresh feed every 5 minutes ---
+		var REFRESH_MS = 5 * 60 * 1000;
+		setInterval(function(){
+			var bar = document.getElementById('refresh-bar');
+			bar.classList.add('active');
+			fetch(location.href).then(function(r){ return r.text(); }).then(function(html){
+				var parser = new DOMParser();
+				var doc = parser.parseFromString(html, 'text/html');
+				var newList = doc.querySelector('.item-list');
+				var newMarkets = doc.querySelector('.markets');
+				if(newList) document.querySelector('.item-list').innerHTML = newList.innerHTML;
+				if(newMarkets) document.querySelector('.markets').innerHTML = newMarkets.innerHTML;
+				setTimeout(function(){ bar.classList.remove('active'); }, 1200);
+			}).catch(function(){
+				bar.classList.remove('active');
+			});
+		}, REFRESH_MS);
+	})();
+	</script>
+</body>
+</html>
