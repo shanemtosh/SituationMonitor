@@ -76,7 +76,7 @@ func Load() (Config, error) {
 		DatabasePath:          getEnv("DATABASE_PATH", "./data/situation.db"),
 		PagesDir:              getEnv("PAGES_DIR", "./data/pages"),
 		OpenRouterAPIKey:      strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY")),
-		OpenRouterModel:       getEnv("OPENROUTER_MODEL", "x-ai/grok-4-fast"),
+		OpenRouterModel:       getEnv("OPENROUTER_MODEL", "x-ai/grok-4.1-fast"),
 		OpenRouterBaseURL:     strings.TrimRight(strings.TrimSpace(getEnv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")), "/"),
 		OpenRouterJSON:        ParseBool("OPENROUTER_JSON_OBJECT", true),
 		OpenRouterHTTPTimeout: orTO,
