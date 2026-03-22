@@ -4,6 +4,28 @@ us|https://rss.nytimes.com/services/xml/rss/nyt/World.xml
 uk|https://www.theguardian.com/world/rss
 mideast|https://www.aljazeera.com/xml/rss/all.xml
 
+# === US News ===
+# NPR Politics (US politics/policy)
+us|https://feeds.npr.org/1014/rss.xml
+# The Hill (DC politics/policy/government)
+us|https://thehill.com/feed/
+# Washington Post — politics
+us|https://feeds.washingtonpost.com/rss/politics
+# Washington Post — world
+us|https://feeds.washingtonpost.com/rss/world
+# Wall Street Journal — world news
+us|https://feeds.content.dowjones.io/public/rss/RSSWorldNews
+# Bloomberg Politics (global politics, business-informed)
+us|https://feeds.bloomberg.com/politics/news.rss
+# Foreign Affairs (elite foreign policy analysis)
+us|https://www.foreignaffairs.com/rss.xml
+# Foreign Policy (geopolitics/policy analysis)
+us|https://www.foreignpolicy.com/feed/
+# ProPublica (investigative journalism)
+us|https://www.propublica.org/feeds/propublica/main
+# The Intercept (investigative/adversarial)
+us|https://theintercept.com/feed/?rss
+
 # === Europe ===
 # France 24 (English, French state intl broadcaster)
 europe|https://www.france24.com/en/rss
