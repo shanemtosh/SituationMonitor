@@ -510,6 +510,19 @@ var readerHTML string
 
 var readerTmpl = template.Must(template.New("reader").Parse(readerHTML))
 
+type readerEntity struct {
+	Name      string
+	Kind      string
+	ItemCount int
+}
+
+type readerSituation struct {
+	Name      string
+	Slug      string
+	Status    string
+	ItemCount int
+}
+
 type readerData struct {
 	DisplayTitle    string
 	DisplaySummary  string
@@ -526,6 +539,8 @@ type readerData struct {
 	ItemID          int64
 	BriefText       string
 	IsInternal      bool // true when accessed via Tailscale/localhost
+	Entities        []readerEntity
+	Situations      []readerSituation
 }
 
 func handleReader(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
@@ -564,6 +579,18 @@ func handleReader(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
 			data.DisplaySummary = item.SummaryTranslated
 		} else if item.Summary != "" {
 			data.DisplaySummary = item.Summary
+		}
+
+		// Load knowledge graph entities and situations for this item
+		if ents, err := store.GetItemEntities(ctx, db, id); err == nil {
+			for _, e := range ents {
+				data.Entities = append(data.Entities, readerEntity{Name: e.Name, Kind: e.Kind, ItemCount: e.ItemCount})
+			}
+		}
+		if sits, err := store.GetItemSituations(ctx, db, id); err == nil {
+			for _, s := range sits {
+				data.Situations = append(data.Situations, readerSituation{Name: s.Name, Slug: s.Slug, Status: s.Status, ItemCount: s.ItemCount})
+			}
 		}
 
 		// Full content: only serve to internal requests

@@ -138,6 +138,96 @@
 			color: var(--bg);
 		}
 
+		/* Knowledge Graph */
+		.kg-section {
+			margin-top: 2rem;
+			padding-top: 1.25rem;
+			border-top: 1px solid var(--border);
+		}
+		.kg-section h3 {
+			font-size: 0.78rem;
+			text-transform: uppercase;
+			letter-spacing: 0.06em;
+			color: var(--dim);
+			margin-bottom: 0.75rem;
+		}
+		.kg-group { margin-bottom: 0.75rem; }
+		.kg-label {
+			font-size: 0.72rem;
+			color: var(--dim);
+			text-transform: uppercase;
+			letter-spacing: 0.04em;
+			display: block;
+			margin-bottom: 0.35rem;
+		}
+		.kg-tags { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+		.kg-entity, .kg-situation {
+			display: inline-flex;
+			align-items: center;
+			gap: 0.3rem;
+			padding: 0.25rem 0.6rem;
+			border-radius: 4px;
+			font-size: 0.8rem;
+			text-decoration: none;
+			color: inherit;
+			border: 1px solid var(--border);
+			transition: border-color 0.15s, background 0.15s;
+			cursor: pointer;
+		}
+		.kg-entity:hover, .kg-situation:hover { border-color: var(--link); background: var(--hover-bg); }
+		.kg-entity.active, .kg-situation.active { border-color: var(--link); background: color-mix(in srgb, var(--link) 12%, var(--bg)); }
+		.kg-kind-PERSON { border-left: 3px solid #7a9; }
+		.kg-kind-ORG { border-left: 3px solid #97a; }
+		.kg-kind-PLACE { border-left: 3px solid #a97; }
+		.kg-kind-TOPIC { border-left: 3px solid #79a; }
+		.kg-count {
+			font-size: 0.68rem;
+			color: var(--dim);
+			background: var(--tag-bg);
+			padding: 0 0.3rem;
+			border-radius: 3px;
+		}
+		.kg-situation { border-left: 3px solid var(--link); }
+		.kg-related {
+			margin-top: 1rem;
+			border: 1px solid var(--border);
+			border-radius: 6px;
+			padding: 0.75rem 1rem;
+		}
+		.kg-related-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-bottom: 0.5rem;
+			font-size: 0.82rem;
+			font-weight: 600;
+		}
+		.kg-close {
+			background: none;
+			border: 1px solid var(--border);
+			border-radius: 4px;
+			padding: 0.15rem 0.5rem;
+			font-size: 0.75rem;
+			cursor: pointer;
+			color: inherit;
+			font-family: inherit;
+		}
+		.kg-close:hover { background: var(--hover-bg); }
+		.kg-related-list { list-style: none; }
+		.kg-related-list li {
+			padding: 0.35rem 0;
+			border-bottom: 1px solid var(--item-border);
+			font-size: 0.85rem;
+		}
+		.kg-related-list li:last-child { border-bottom: none; }
+		.kg-related-list a { color: inherit; text-decoration: none; }
+		.kg-related-list a:hover { text-decoration: underline; }
+		.kg-related-list .kg-rel-meta {
+			font-size: 0.72rem;
+			color: var(--dim);
+			margin-left: 0.25rem;
+		}
+
 		footer { font-size: 0.78rem; color: var(--dim); margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); }
 		.site-footer {
 			font-size: 0.75rem;
@@ -217,6 +307,35 @@
 	<p class="loading">Fetching article content…</p>
 	{{end}}
 
+	{{if or .Entities .Situations}}
+	<div class="kg-section">
+		<h3>Knowledge Graph</h3>
+		{{if .Situations}}
+		<div class="kg-group">
+			<span class="kg-label">Situations</span>
+			<div class="kg-tags">
+				{{range .Situations}}<a href="#" class="kg-situation" data-slug="{{.Slug}}" onclick="toggleSituation(this,'{{.Slug}}');return false">{{.Name}} <span class="kg-count">{{.ItemCount}}</span></a>{{end}}
+			</div>
+		</div>
+		{{end}}
+		{{if .Entities}}
+		<div class="kg-group">
+			<span class="kg-label">Entities</span>
+			<div class="kg-tags">
+				{{range .Entities}}<a href="#" class="kg-entity kg-kind-{{.Kind}}" data-name="{{.Name}}" onclick="toggleEntity(this,'{{.Name}}');return false">{{.Name}} <span class="kg-count">{{.ItemCount}}</span></a>{{end}}
+			</div>
+		</div>
+		{{end}}
+		<div id="kg-related" class="kg-related" style="display:none">
+			<div class="kg-related-header">
+				<span id="kg-related-title"></span>
+				<button onclick="document.getElementById('kg-related').style.display='none'" class="kg-close">Close</button>
+			</div>
+			<ul id="kg-related-list" class="kg-related-list"></ul>
+		</div>
+	</div>
+	{{end}}
+
 	<footer>
 		<a href="/">Situation Monitor</a>
 	</footer>
@@ -260,6 +379,71 @@
 			el.innerHTML = renderBrief(el.textContent);
 		}
 	})();
+	function toggleEntity(el, name) {
+		var panel = document.getElementById('kg-related');
+		var title = document.getElementById('kg-related-title');
+		var list = document.getElementById('kg-related-list');
+		// Toggle off if same entity clicked
+		if (el.classList.contains('active')) {
+			el.classList.remove('active');
+			panel.style.display = 'none';
+			return;
+		}
+		// Clear other active states
+		document.querySelectorAll('.kg-entity.active, .kg-situation.active').forEach(function(a){ a.classList.remove('active'); });
+		el.classList.add('active');
+		title.textContent = name;
+		list.innerHTML = '<li style="color:var(--dim);font-style:italic">Loading…</li>';
+		panel.style.display = 'block';
+		panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+		fetch('/api/entities/' + encodeURIComponent(name))
+			.then(function(r){ return r.json(); })
+			.then(function(d){
+				if (!d.items || d.items.length === 0) {
+					list.innerHTML = '<li style="color:var(--dim)">No related items found.</li>';
+					return;
+				}
+				list.innerHTML = d.items.slice(0, 15).map(function(item){
+					var t = item.title_translated || item.title;
+					var meta = (item.feed_url||'').replace(/^https?:\/\/(www\.)?/,'').split('/')[0].replace(/^feeds\./,'');
+					if (item.created_at) meta += (meta ? ' · ' : '') + item.created_at.split('T')[0];
+					return '<li><a href="/read/' + item.id + '">' + t + '</a><span class="kg-rel-meta">' + meta + '</span></li>';
+				}).join('');
+			})
+			.catch(function(){ list.innerHTML = '<li style="color:var(--dim)">Failed to load.</li>'; });
+	}
+	function toggleSituation(el, slug) {
+		var panel = document.getElementById('kg-related');
+		var title = document.getElementById('kg-related-title');
+		var list = document.getElementById('kg-related-list');
+		if (el.classList.contains('active')) {
+			el.classList.remove('active');
+			panel.style.display = 'none';
+			return;
+		}
+		document.querySelectorAll('.kg-entity.active, .kg-situation.active').forEach(function(a){ a.classList.remove('active'); });
+		el.classList.add('active');
+		title.textContent = el.textContent.trim();
+		list.innerHTML = '<li style="color:var(--dim);font-style:italic">Loading…</li>';
+		panel.style.display = 'block';
+		panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+		fetch('/api/situations/' + encodeURIComponent(slug))
+			.then(function(r){ return r.json(); })
+			.then(function(d){
+				var items = d.items || [];
+				if (items.length === 0) {
+					list.innerHTML = '<li style="color:var(--dim)">No related items found.</li>';
+					return;
+				}
+				list.innerHTML = items.slice(0, 15).map(function(item){
+					var t = item.title_translated || item.title;
+					var meta = (item.feed_url||'').replace(/^https?:\/\/(www\.)?/,'').split('/')[0].replace(/^feeds\./,'');
+					if (item.created_at) meta += (meta ? ' · ' : '') + item.created_at.split('T')[0];
+					return '<li><a href="/read/' + item.id + '">' + t + '</a><span class="kg-rel-meta">' + meta + '</span></li>';
+				}).join('');
+			})
+			.catch(function(){ list.innerHTML = '<li style="color:var(--dim)">Failed to load.</li>'; });
+	}
 	(function(){
 		var SUN='<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
 		var MOON='<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>';
