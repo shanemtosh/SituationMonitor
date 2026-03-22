@@ -151,15 +151,18 @@ func handleBriefItem(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
 
 		// Call Ollama for synthesis (90s timeout)
 		var synthesis string
-		if rc.OllamaModel != "" && len(ollamaRelated) > 0 {
+		if rc.OllamaModel != "" {
 			ctxOllama, cancel := context.WithTimeout(ctx, 90*time.Second)
 			defer cancel()
-			synthesis, err = ollama.BriefOnItem(ctxOllama, rc.OllamaBaseURL, rc.OllamaModel, pivotTitle, pivotSummary, ollamaRelated)
+			if len(ollamaRelated) > 0 {
+				synthesis, err = ollama.BriefOnItem(ctxOllama, rc.OllamaBaseURL, rc.OllamaModel, pivotTitle, pivotSummary, ollamaRelated)
+			} else {
+				// No related items — generate a standalone brief
+				synthesis, err = ollama.BriefOnItem(ctxOllama, rc.OllamaBaseURL, rc.OllamaModel, pivotTitle, pivotSummary, nil)
+			}
 			if err != nil {
 				synthesis = fmt.Sprintf("(synthesis unavailable: %v)", err)
 			}
-		} else if len(ollamaRelated) == 0 {
-			synthesis = "No related coverage found for synthesis."
 		} else {
 			synthesis = "Ollama not configured for synthesis."
 		}

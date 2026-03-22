@@ -27,20 +27,28 @@ func BriefOnItem(ctx context.Context, baseURL, model, pivotTitle, pivotSummary s
 	}
 
 	var sb strings.Builder
-	sb.WriteString("Synthesize a brief intelligence summary about this topic based on multiple sources.\n\n")
-	sb.WriteString(fmt.Sprintf("PRIMARY ITEM:\nTitle: %s\nSummary: %s\n\n", pivotTitle, pivotSummary))
-	sb.WriteString("RELATED COVERAGE:\n")
-	for i, r := range related {
-		if i >= 20 {
-			break
+	if len(related) > 0 {
+		sb.WriteString("Synthesize a brief intelligence summary about this topic based on multiple sources.\n\n")
+		sb.WriteString(fmt.Sprintf("PRIMARY ITEM:\nTitle: %s\nSummary: %s\n\n", pivotTitle, pivotSummary))
+		sb.WriteString("RELATED COVERAGE:\n")
+		for i, r := range related {
+			if i >= 20 {
+				break
+			}
+			sb.WriteString(fmt.Sprintf("%d. [%s, %s] %s — %s\n", i+1, r.Source, r.Age, r.Title, r.Summary))
 		}
-		sb.WriteString(fmt.Sprintf("%d. [%s, %s] %s — %s\n", i+1, r.Source, r.Age, r.Title, r.Summary))
+		sb.WriteString("\nWrite a 3-5 paragraph synthesis that:\n")
+		sb.WriteString("- Explains the core situation\n")
+		sb.WriteString("- Notes where sources agree or differ\n")
+		sb.WriteString("- Highlights what changed most recently\n")
+		sb.WriteString("- Assesses why this matters\n")
+	} else {
+		sb.WriteString("Write a brief intelligence-style analysis of this news item.\n\n")
+		sb.WriteString(fmt.Sprintf("Title: %s\nSummary: %s\n\n", pivotTitle, pivotSummary))
+		sb.WriteString("Write 2-3 paragraphs that:\n")
+		sb.WriteString("- Explain what happened and the context\n")
+		sb.WriteString("- Assess why this matters and potential implications\n")
 	}
-	sb.WriteString("\nWrite a 3-5 paragraph synthesis that:\n")
-	sb.WriteString("- Explains the core situation\n")
-	sb.WriteString("- Notes where sources agree or differ\n")
-	sb.WriteString("- Highlights what changed most recently\n")
-	sb.WriteString("- Assesses why this matters\n")
 	sb.WriteString("\nBe direct and analytical. No preamble.")
 
 	body, err := json.Marshal(map[string]any{

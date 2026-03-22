@@ -29,7 +29,7 @@ func ExtractEntities(ctx context.Context, baseURL, model, title, summary string)
 		sum = sum[:4000] + "…"
 	}
 
-	user := fmt.Sprintf(`Extract entities from this news item.
+	user := fmt.Sprintf(`Extract named entities from this news item.
 
 Title: %s
 Summary: %s
@@ -37,9 +37,16 @@ Summary: %s
 Reply with ONLY a JSON array (max 12 entities):
 [{"name":"...","kind":"PERSON"},{"name":"...","kind":"ORG"},...]
 
-kind must be one of: PERSON ORG PLACE TOPIC
-Normalize names to their canonical English form.
-Omit generic terms. Omit entities with fewer than 2 words unless they are countries or well-known single-word orgs (e.g. NATO, TSMC, Apple).`,
+Rules:
+- kind must be one of: PERSON ORG PLACE TOPIC
+- PLACE: countries, cities, regions (e.g. Syria, Damascus, Middle East, Gaza, Strait of Hormuz)
+- PERSON: named individuals (e.g. Donald Trump, Xi Jinping)
+- ORG: organizations, companies, government bodies (e.g. NATO, Federal Reserve, TSMC)
+- TOPIC: major events, policies, issues (e.g. Iran war, climate change, AI chips)
+- Always extract country names as PLACE
+- Always extract city names as PLACE
+- Normalize to canonical English form
+- Do NOT include generic terms like "authorities", "residents", "officials"`,
 		strings.TrimSpace(title), sum)
 
 	body, err := json.Marshal(map[string]any{
