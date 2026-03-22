@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>{{.DisplayTitle}} — Situation Monitor</title>
+	<style>
+		:root { color-scheme: dark light; --bg: #fff; --fg: #111; --dim: #888; --dim2: #555; --border: #ddd; --link: #0b5fff; --article-bg: transparent; }
+		* { box-sizing: border-box; margin: 0; padding: 0; }
+		body {
+			font-family: system-ui, -apple-system, sans-serif;
+			line-height: 1.65;
+			padding: 1rem 1rem 4rem;
+			max-width: 720px;
+			margin: 0 auto;
+			min-height: 100dvh;
+			background: var(--bg);
+			color: var(--fg);
+		}
+		body.dark { --bg: #111; --fg: #e8e8e8; --dim: #777; --dim2: #9aa; --border: #333; --link: #6af; --article-bg: transparent; }
+		nav {
+			display: flex;
+			gap: 0.75rem;
+			align-items: center;
+			font-size: 0.85rem;
+			padding: 0.5rem 0 1rem;
+			border-bottom: 1px solid var(--border);
+			margin-bottom: 1.25rem;
+		}
+		nav a { text-decoration: none; color: inherit; opacity: 0.6; }
+		nav a:hover { opacity: 1; }
+		.nav-spacer { flex: 1; }
+		.theme-btn {
+			background: none; border: none; cursor: pointer;
+			padding: 0.25rem; opacity: 0.5;
+			color: inherit; display: flex; align-items: center;
+		}
+		.theme-btn:hover { opacity: 1; }
+		.theme-btn svg { width: 16px; height: 16px; fill: currentColor; }
+
+		header { margin-bottom: 1.5rem; }
+		header h1 { font-size: 1.2rem; line-height: 1.35; margin-bottom: 0.4rem; }
+		.meta { font-size: 0.8rem; color: var(--dim); display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+		.meta a { color: var(--link); }
+		.original-link {
+			display: inline-block;
+			font-size: 0.82rem;
+			color: var(--link);
+			margin-top: 0.5rem;
+		}
+
+		.summary {
+			font-size: 0.92rem;
+			color: var(--dim2);
+			font-style: italic;
+			padding: 0.75rem 0;
+			border-bottom: 1px solid var(--border);
+			margin-bottom: 1.5rem;
+		}
+
+		.article-content {
+			font-size: 0.95rem;
+			line-height: 1.7;
+			white-space: pre-wrap;
+			word-wrap: break-word;
+		}
+
+		.loading {
+			color: var(--dim);
+			font-style: italic;
+			padding: 2rem 0;
+		}
+		.error-msg {
+			color: #d44;
+			font-size: 0.9rem;
+			padding: 1rem 0;
+		}
+		.translate-notice {
+			font-size: 0.78rem;
+			color: var(--dim);
+			margin-top: 1.5rem;
+			padding-top: 0.75rem;
+			border-top: 1px solid var(--border);
+		}
+
+		footer { font-size: 0.78rem; color: var(--dim); margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+
+		@media (prefers-color-scheme: dark) {
+			:root:not(.light-forced) { --bg: #111; --fg: #e8e8e8; --dim: #777; --dim2: #9aa; --border: #333; --link: #6af; }
+		}
+		@media print { nav { display: none; } body { padding: 0; } }
+	</style>
+</head>
+<body>
+	<nav>
+		<a href="/">Feed</a>
+		<a href="/daily/">Briefings</a>
+		<span class="nav-spacer"></span>
+		<button class="theme-btn" id="theme-toggle"></button>
+	</nav>
+
+	<header>
+		<h1>{{.DisplayTitle}}</h1>
+		<div class="meta">
+			<span>{{.SourceKind}}{{if .FeedName}} · {{.FeedName}}{{end}}</span>
+			<span>{{.CreatedAt}}</span>
+			{{if .Lang}}<span>{{.Lang}}</span>{{end}}
+		</div>
+		{{if .URL}}<a class="original-link" href="{{.URL}}" rel="noopener">View original</a>{{end}}
+	</header>
+
+	{{if .DisplaySummary}}
+	<div class="summary">{{.DisplaySummary}}</div>
+	{{end}}
+
+	{{if .Error}}
+	<p class="error-msg">{{.Error}}</p>
+	{{else if .Content}}
+	<div class="article-content">{{.Content}}</div>
+	{{if .WasTranslated}}
+	<p class="translate-notice">Translated from {{.Lang}} by {{.TranslatorModel}}</p>
+	{{end}}
+	{{else}}
+	<p class="loading">Fetching article content…</p>
+	{{end}}
+
+	<footer>
+		<a href="/">Situation Monitor</a>
+	</footer>
+
+	<script>
+	(function(){
+		var SUN='<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+		var MOON='<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>';
+		var b=document.getElementById('theme-toggle'),s=localStorage.getItem('sm-theme');
+		function d(m){return m==='dark'||(!m&&window.matchMedia('(prefers-color-scheme:dark)').matches)}
+		function a(m){if(m==='dark'){document.body.classList.add('dark');document.documentElement.classList.add('light-forced')}else if(m==='light'){document.body.classList.remove('dark');document.documentElement.classList.add('light-forced')}else{document.body.classList.remove('dark');document.documentElement.classList.remove('light-forced')}b.innerHTML=d(m)?SUN:MOON}
+		a(s);b.addEventListener('click',function(){var n=d(s)?'light':'dark';localStorage.setItem('sm-theme',n);s=n;a(n)});
+	})();
+	</script>
+</body>
+</html>

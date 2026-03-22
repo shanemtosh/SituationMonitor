@@ -27,6 +27,12 @@ type Config struct {
 	TranslateBatch  int
 	TranslateOnStart bool
 
+	NERModel         string
+	NERPoll          time.Duration
+	NERBatch         int
+	NEROnStart       bool
+	SituationMinItems int
+
 	RSSFeedsFile     string
 	RSSPollInterval  time.Duration
 	RSSFetchTimeout  time.Duration
@@ -47,6 +53,8 @@ type Config struct {
 	MarketPoll      time.Duration
 	MarketFetchTO   time.Duration
 	MarketOnStart   bool
+
+	PaywallFetcherURL string
 }
 
 // Load reads configuration from the environment.
@@ -78,6 +86,12 @@ func Load() (Config, error) {
 		TranslateBatch:   ParseInt("TRANSLATE_BATCH", 15),
 		TranslateOnStart: ParseBool("TRANSLATE_ON_START", true),
 
+		NERModel:          getEnv("NER_MODEL", ""),
+		NERPoll:           durSec("NER_POLL_SEC", 900),
+		NERBatch:          ParseInt("NER_BATCH", 10),
+		NEROnStart:        ParseBool("NER_ON_START", true),
+		SituationMinItems: ParseInt("SITUATION_MIN_ITEMS", 4),
+
 		RSSFeedsFile:     getEnv("RSS_FEEDS_FILE", "config/feeds.txt"),
 		RSSPollInterval:  rssPoll,
 		RSSFetchTimeout:  durSec("RSS_FETCH_TIMEOUT_SEC", 45),
@@ -98,6 +112,8 @@ func Load() (Config, error) {
 		MarketPoll:    mktPoll,
 		MarketFetchTO: durSec("MARKET_FETCH_TIMEOUT_SEC", 30),
 		MarketOnStart: ParseBool("MARKET_ON_START", true),
+
+		PaywallFetcherURL: strings.TrimRight(strings.TrimSpace(os.Getenv("PAYWALL_FETCHER_URL")), "/"),
 	}
 
 	if c.RSSFetchTimeout <= 0 {

@@ -1,4 +1,43 @@
-# Default starter feeds (same as feeds.example.txt). Replace with your own list.
+# === Western / English ===
 https://feeds.bbci.co.uk/news/world/rss.xml
 https://rss.nytimes.com/services/xml/rss/nyt/World.xml
 https://www.theguardian.com/world/rss
+https://www.aljazeera.com/xml/rss/all.xml
+
+# === East Asia ===
+# NHK (Japanese) — translated by Ollama
+https://www3.nhk.or.jp/rss/news/cat6.xml
+# Nikkei Asia (English)
+https://asia.nikkei.com/rss/feed/nar
+# Yonhap (English)
+https://en.yna.co.kr/RSS/news.xml
+# Korea Herald (English)
+https://www.koreaherald.com/rss/020100000000.xml
+# CGTN (English, Chinese state perspective)
+https://www.cgtn.com/subscribe/rss/section/world.xml
+# Taipei Times (English, Taiwan perspective)
+https://www.taipeitimes.com/xml/index.rss
+
+# === South & Southeast Asia ===
+# Hindustan Times (English)
+https://www.hindustantimes.com/feeds/rss/world-news/rssfeed.xml
+# South China Morning Post (English, HK perspective)
+https://www.scmp.com/rss/91/feed
+
+# === Semiconductors & Memory ===
+# DigiTimes Asia (English, Taiwan supply chain)
+https://www.digitimes.com/rss/daily.xml
+# TrendForce (English, DRAM/NAND/foundry market intelligence)
+https://www.trendforce.com/news/rss
+# EE Times (English, semiconductor industry)
+https://www.eetimes.com/feed/
+# SemiEngineering (English, chip design & manufacturing)
+https://semiengineering.com/feed/
+# SemiAnalysis (English, deep semiconductor analysis)
+https://semianalysis.substack.com/feed
+# KED Global (English, Korea Economic Daily — Samsung/SK Hynix)
+https://www.kedglobal.com/newsRss
+
+# === Supply Chain & Manufacturing ===
+# Supply Chain Dive (English, global supply chain)
+https://www.supplychaindive.com/feeds/news/

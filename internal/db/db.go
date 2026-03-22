@@ -115,6 +115,53 @@ CREATE TABLE IF NOT EXISTS alert_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_alert_log_sent ON alert_log(sent_at);
+
+CREATE TABLE IF NOT EXISTS entities (
+	id          INTEGER PRIMARY KEY AUTOINCREMENT,
+	name        TEXT NOT NULL,
+	kind        TEXT NOT NULL,
+	first_seen  TEXT NOT NULL,
+	last_seen   TEXT NOT NULL,
+	item_count  INTEGER NOT NULL DEFAULT 0,
+	UNIQUE(name, kind)
+);
+
+CREATE INDEX IF NOT EXISTS idx_entities_kind ON entities(kind);
+CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name);
+
+CREATE TABLE IF NOT EXISTS item_entities (
+	item_id    INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	entity_id  INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+	PRIMARY KEY (item_id, entity_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_item_entities_item   ON item_entities(item_id);
+CREATE INDEX IF NOT EXISTS idx_item_entities_entity ON item_entities(entity_id);
+
+CREATE TABLE IF NOT EXISTS situations (
+	id          INTEGER PRIMARY KEY AUTOINCREMENT,
+	name        TEXT NOT NULL,
+	slug        TEXT NOT NULL UNIQUE,
+	description TEXT NOT NULL DEFAULT '',
+	status      TEXT NOT NULL DEFAULT 'active',
+	created_at  TEXT NOT NULL,
+	updated_at  TEXT NOT NULL,
+	item_count  INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_situations_updated ON situations(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_situations_status  ON situations(status);
+
+CREATE TABLE IF NOT EXISTS situation_items (
+	situation_id INTEGER NOT NULL REFERENCES situations(id) ON DELETE CASCADE,
+	item_id      INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+	linked_at    TEXT NOT NULL,
+	PRIMARY KEY (situation_id, item_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_situation_items_sit  ON situation_items(situation_id);
+CREATE INDEX IF NOT EXISTS idx_situation_items_item ON situation_items(item_id);
+
 `
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -131,6 +178,12 @@ CREATE INDEX IF NOT EXISTS idx_alert_log_sent ON alert_log(sent_at);
 		{"items", "feed_url", "TEXT"},
 		{"items", "alert_sent_at", "TEXT"},
 		{"sweeps", "response_json", "TEXT"},
+		{"items", "content_text", "TEXT"},
+		{"items", "content_translated", "TEXT"},
+		{"items", "content_fetched_at", "TEXT"},
+		{"items", "entities_extracted_at", "TEXT"},
+		{"entities", "canonical_id", "INTEGER REFERENCES entities(id)"},
+		{"situations", "parent_id", "INTEGER REFERENCES situations(id)"},
 	} {
 		if err := tryAddColumn(ctx, d, step.table, step.col, step.decl); err != nil {
 			return err

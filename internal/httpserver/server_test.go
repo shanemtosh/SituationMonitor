@@ -16,7 +16,7 @@ func TestHealth(t *testing.T) {
 	defer d.Close()
 
 	mux := http.NewServeMux()
-	Mount(mux, d, t.TempDir())
+	Mount(mux, d, t.TempDir(), ReaderConfig{})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 

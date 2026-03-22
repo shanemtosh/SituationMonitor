@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"situationmonitor/internal/reader"
 	"situationmonitor/internal/store"
 	"gopkg.in/yaml.v3"
 )
@@ -24,9 +26,17 @@ var dashboardHTML string
 
 var dashboardTmpl = template.Must(template.New("dash").Parse(dashboardHTML))
 
+// ReaderConfig holds settings for on-demand article fetching and translation.
+type ReaderConfig struct {
+	OllamaBaseURL     string
+	OllamaModel       string
+	TargetLang        string
+	PaywallFetcherURL string // e.g. "http://127.0.0.1:3100" — empty disables
+}
+
 // Mount registers HTTP routes on mux. pagesDir is the directory where
-// generated daily briefing HTML files are stored (e.g. "data/pages").
-func Mount(mux *http.ServeMux, db *sql.DB, pagesDir string) {
+// generated daily briefing YAML files are stored (e.g. "data/pages").
+func Mount(mux *http.ServeMux, db *sql.DB, pagesDir string, rc ReaderConfig) {
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte("ok\n"))
@@ -37,6 +47,12 @@ func Mount(mux *http.ServeMux, db *sql.DB, pagesDir string) {
 	mux.HandleFunc("GET /api/sweeps", handleSweepsJSON(db))
 	mux.HandleFunc("GET /daily/", handleDailyIndex(pagesDir))
 	mux.HandleFunc("GET /daily/{date}", handleDailyPage(pagesDir))
+	mux.HandleFunc("GET /read/{id}", handleReader(db, rc))
+	mux.HandleFunc("GET /api/brief/{id}", handleBriefItem(db, rc))
+	mux.HandleFunc("GET /api/situations", handleSituationsJSON(db))
+	mux.HandleFunc("GET /api/situations/{slug}", handleSituationDetail(db))
+	mux.HandleFunc("GET /api/entities/{name}", handleEntityDetail(db))
+	mountManageRoutes(mux, db)
 }
 
 type itemJSON struct {
@@ -141,11 +157,13 @@ type dashQuote struct {
 }
 
 type dashItem struct {
+	ID         int64
 	CreatedAt  string
 	Urgency    int
 	SourceKind string
 	Title      string
 	TitleTrans string
+	Summary    string
 	URL        string
 	FeedName   string
 	Tags       []string
@@ -186,9 +204,17 @@ func handleDashboard(db *sql.DB) http.HandlerFunc {
 		for _, it := range items {
 			var tags []string
 			_ = json.Unmarshal([]byte(it.TagsJSON), &tags)
+			summary := it.SummaryTrans
+			if summary == "" {
+				summary = it.Summary
+			}
+			// Truncate summary for feed view
+			if len(summary) > 200 {
+				summary = summary[:200] + "…"
+			}
 			di = append(di, dashItem{
-				CreatedAt: it.CreatedAt, Urgency: it.Urgency, SourceKind: it.SourceKind,
-				Title: it.Title, TitleTrans: it.TitleTrans, URL: it.URL,
+				ID: it.ID, CreatedAt: it.CreatedAt, Urgency: it.Urgency, SourceKind: it.SourceKind,
+				Title: it.Title, TitleTrans: it.TitleTrans, Summary: summary, URL: it.URL,
 				FeedName: feedName(it.FeedURL), Tags: tags,
 			})
 		}
@@ -201,16 +227,36 @@ func handleDashboard(db *sql.DB) http.HandlerFunc {
 // feedName extracts a short publication name from a feed URL.
 // e.g. "https://feeds.bbci.co.uk/news/world/rss.xml" → "BBC"
 var knownFeeds = map[string]string{
-	"bbci.co.uk":      "BBC",
-	"nytimes.com":     "NYT",
-	"theguardian.com": "Guardian",
-	"reuters.com":     "Reuters",
-	"aljazeera.com":   "Al Jazeera",
+	// General news
+	"bbci.co.uk":         "BBC",
+	"nytimes.com":        "NYT",
+	"theguardian.com":    "Guardian",
+	"reuters.com":        "Reuters",
+	"aljazeera.com":      "Al Jazeera",
 	"washingtonpost.com": "WaPo",
-	"cnbc.com":        "CNBC",
-	"cnn.com":         "CNN",
-	"npr.org":         "NPR",
-	"apnews.com":      "AP",
+	"cnbc.com":           "CNBC",
+	"cnn.com":            "CNN",
+	"npr.org":            "NPR",
+	"apnews.com":         "AP",
+	// Asia
+	"nhk.or.jp":          "NHK",
+	"nikkei.com":         "Nikkei",
+	"yna.co.kr":          "Yonhap",
+	"koreaherald.com":    "Korea Herald",
+	"cgtn.com":           "CGTN",
+	"hindustantimes.com": "Hindustan Times",
+	"scmp.com":           "SCMP",
+	"chinadaily.com.cn":  "China Daily",
+	"taipeitimes.com":    "Taipei Times",
+	// Semiconductors & industry
+	"digitimes.com":      "DigiTimes",
+	"trendforce.com":     "TrendForce",
+	"eetimes.com":        "EE Times",
+	"semiengineering.com": "SemiEngineering",
+	"semianalysis":       "SemiAnalysis",
+	"kedglobal.com":      "KED Global",
+	// Supply chain
+	"supplychaindive.com": "Supply Chain Dive",
 }
 
 func feedName(feedURL string) string {
@@ -390,3 +436,121 @@ func handleDailyIndex(pagesDir string) http.HandlerFunc {
 		_ = dailyIndexTmpl.Execute(w, list)
 	}
 }
+
+//go:embed reader.html
+var readerHTML string
+
+var readerTmpl = template.Must(template.New("reader").Parse(readerHTML))
+
+type readerData struct {
+	DisplayTitle   string
+	DisplaySummary string
+	URL            string
+	SourceKind     string
+	FeedName       string
+	Lang           string
+	CreatedAt      string
+	Content        string
+	Error          string
+	WasTranslated  bool
+	TranslatorModel string
+}
+
+func handleReader(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+
+		ctx := r.Context()
+		item, err := store.GetReaderItem(ctx, db, id)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+
+		data := readerData{
+			DisplayTitle: item.Title,
+			URL:          item.URL,
+			SourceKind:   item.SourceKind,
+			FeedName:     feedName(item.FeedURL),
+			Lang:         item.Lang,
+			CreatedAt:    item.CreatedAt,
+		}
+		if item.TitleTranslated != "" {
+			data.DisplayTitle = item.TitleTranslated
+		}
+		if item.SummaryTranslated != "" {
+			data.DisplaySummary = item.SummaryTranslated
+		} else if item.Summary != "" {
+			data.DisplaySummary = item.Summary
+		}
+
+		// Serve cached content if available
+		if item.ContentFetchedAt != "" {
+			if item.ContentTranslated != "" {
+				data.Content = item.ContentTranslated
+				data.WasTranslated = true
+				data.TranslatorModel = rc.OllamaModel
+			} else {
+				data.Content = item.ContentText
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_ = readerTmpl.Execute(w, data)
+			return
+		}
+
+		// Fetch article content on demand
+		if item.URL == "" {
+			data.Error = "No URL available for this item."
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_ = readerTmpl.Execute(w, data)
+			return
+		}
+
+		article, err := reader.Fetch(ctx, item.URL, reader.FetchConfig{
+			PaywallFetcherURL: rc.PaywallFetcherURL,
+		})
+		if err != nil {
+			log.Printf("reader: fetch %d: %v", id, err)
+			data.Error = fmt.Sprintf("Could not fetch article: %v", err)
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_ = readerTmpl.Execute(w, data)
+			return
+		}
+
+		contentText := article.Content
+		var contentTranslated string
+
+		// Translate if non-English and Ollama is configured
+		needsTranslation := item.Lang != "" && item.Lang != "en" && item.Lang != "und"
+		if needsTranslation && rc.OllamaModel != "" {
+			translated, err := reader.TranslateContent(ctx, rc.OllamaBaseURL, rc.OllamaModel, rc.TargetLang, contentText)
+			if err != nil {
+				log.Printf("reader: translate %d: %v", id, err)
+			} else {
+				contentTranslated = translated
+			}
+		}
+
+		// Cache the result
+		if err := store.SetContent(ctx, db, id, contentText, contentTranslated); err != nil {
+			log.Printf("reader: cache %d: %v", id, err)
+		}
+
+		if contentTranslated != "" {
+			data.Content = contentTranslated
+			data.WasTranslated = true
+			data.TranslatorModel = rc.OllamaModel
+		} else {
+			data.Content = contentText
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_ = readerTmpl.Execute(w, data)
+	}
+}
+

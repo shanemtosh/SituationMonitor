@@ -21,16 +21,17 @@ func TranslateToTarget(ctx context.Context, baseURL, model, targetLang, title, s
 	if len(sum) > 6000 {
 		sum = sum[:6000] + "…"
 	}
-	user := fmt.Sprintf(`Title: %s
+	user := fmt.Sprintf(`Translate to %s.
 
-Summary:
-%s
+Title: %s
+Summary: %s
 
-Return JSON only with this exact shape:
-{"lang":"<detected ISO 639-1 code>","title":"<title in %s>","summary":"<summary in %s>"}
+Reply with ONLY this JSON:
+{"lang":"xx","title":"English title","summary":"English summary"}
 
-If the text is already in %s, keep wording the same but still fill all fields.`,
-		strings.TrimSpace(title), sum, targetLang, targetLang, targetLang)
+lang = detected source language code (ja, zh, ko, etc).
+title and summary MUST be in %s.`,
+		targetLang, strings.TrimSpace(title), sum, targetLang)
 
 	body, err := json.Marshal(map[string]any{
 		"model": model,
@@ -41,13 +42,14 @@ If the text is already in %s, keep wording the same but still fill all fields.`,
 		"stream": false,
 		"options": map[string]any{
 			"temperature": 0.1,
+			"num_ctx":     2048,
 		},
 	})
 	if err != nil {
 		return "", "", "", err
 	}
 
-	client := &http.Client{Timeout: 3 * time.Minute}
+	client := &http.Client{Timeout: 5 * time.Minute}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/chat", bytes.NewReader(body))
 	if err != nil {
 		return "", "", "", err

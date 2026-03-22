@@ -1,0 +1,18 @@
+services:
+  rsshub:
+    image: diygod/rsshub
+    ports:
+      - "1200:1200"
+    environment:
+      - NODE_ENV=production
+      - CACHE_TYPE=memory
+      - CACHE_EXPIRE=300
+    restart: unless-stopped
+
+  paywall-fetcher:
+    build: ./services/paywall-fetcher
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./data/playwright:/data
+    restart: unless-stopped

@@ -15,6 +15,7 @@ import (
 	"github.com/mmcdole/gofeed"
 
 	"situationmonitor/internal/feeds"
+	"situationmonitor/internal/htmltext"
 	"situationmonitor/internal/store"
 )
 
@@ -121,7 +122,7 @@ func ingestOne(ctx context.Context, db *sql.DB, client *http.Client, parser *gof
 		if extID == "" {
 			continue
 		}
-		title := strings.TrimSpace(it.Title)
+		title := htmltext.Strip(it.Title)
 		if title == "" {
 			title = "(no title)"
 		}
@@ -175,13 +176,17 @@ func externalID(it *gofeed.Item) string {
 }
 
 func publishedAt(it *gofeed.Item) time.Time {
+	var t time.Time
 	if it.PublishedParsed != nil && !it.PublishedParsed.IsZero() {
-		return it.PublishedParsed.UTC()
+		t = it.PublishedParsed.UTC()
+	} else if it.UpdatedParsed != nil && !it.UpdatedParsed.IsZero() {
+		t = it.UpdatedParsed.UTC()
 	}
-	if it.UpdatedParsed != nil && !it.UpdatedParsed.IsZero() {
-		return it.UpdatedParsed.UTC()
+	// Clamp future dates to now (some feeds like Taipei Times publish with tomorrow's date)
+	if !t.IsZero() && t.After(time.Now().UTC()) {
+		t = time.Now().UTC()
 	}
-	return time.Time{}
+	return t
 }
 
 func pickSummary(it *gofeed.Item) string {
@@ -189,6 +194,7 @@ func pickSummary(it *gofeed.Item) string {
 	if s == "" {
 		s = strings.TrimSpace(it.Description)
 	}
+	s = htmltext.Strip(s)
 	const max = 12000
 	if len(s) > max {
 		return s[:max] + "…"

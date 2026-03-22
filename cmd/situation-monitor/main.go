@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -16,11 +18,39 @@ import (
 	"situationmonitor/internal/ingest/rss"
 	"situationmonitor/internal/ingest/sweep"
 	"situationmonitor/internal/market"
+	"situationmonitor/internal/ollama"
+	"situationmonitor/internal/extract"
 	"situationmonitor/internal/translate"
 )
 
+func loadDotenv(path string) {
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		k = strings.TrimSpace(k)
+		v = strings.TrimSpace(v)
+		// Don't override env vars already set externally
+		if os.Getenv(k) == "" {
+			os.Setenv(k, v)
+		}
+	}
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	loadDotenv(".env")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -70,14 +100,42 @@ func main() {
 		log.Printf("sweep: disabled (set OPENROUTER_API_KEY)")
 	}
 
+	var ollamaMgr *ollama.Manager
 	if cfg.TranslatePoll > 0 && cfg.OllamaTranslate != "" {
-		go translate.RunLoop(ctx, sqlDB, translate.LoopConfig{
-			OllamaBaseURL: cfg.OllamaBaseURL,
-			Model:         cfg.OllamaTranslate,
-			TargetLang:    cfg.TranslateTarget,
-			PollInterval:  cfg.TranslatePoll,
-			BatchSize:     cfg.TranslateBatch,
-			OnStart:       cfg.TranslateOnStart,
+		ollamaMgr = &ollama.Manager{
+			BaseURL: cfg.OllamaBaseURL,
+			Model:   cfg.OllamaTranslate,
+		}
+		if err := ollamaMgr.Start(ctx); err != nil {
+			log.Printf("ollama: %v — translation disabled", err)
+			ollamaMgr = nil
+		} else {
+			go translate.RunLoop(ctx, sqlDB, translate.LoopConfig{
+				OllamaBaseURL:     cfg.OllamaBaseURL,
+				Model:             cfg.OllamaTranslate,
+				TargetLang:        cfg.TranslateTarget,
+				PollInterval:      cfg.TranslatePoll,
+				BatchSize:         cfg.TranslateBatch,
+				OnStart:           cfg.TranslateOnStart,
+				PaywallFetcherURL: cfg.PaywallFetcherURL,
+			})
+		}
+	}
+
+	// NER / entity extraction / situation tracking worker
+	nerModel := cfg.NERModel
+	if nerModel == "" {
+		nerModel = cfg.OllamaTranslate // fall back to translate model
+	}
+	if cfg.NERPoll > 0 && nerModel != "" && ollamaMgr != nil {
+		go extract.RunLoop(ctx, sqlDB, extract.LoopConfig{
+			OllamaBaseURL:     cfg.OllamaBaseURL,
+			Model:             nerModel,
+			PollInterval:      cfg.NERPoll,
+			BatchSize:         cfg.NERBatch,
+			OnStart:           cfg.NEROnStart,
+			MinClusterOverlap: 2,
+			SituationMinItems: cfg.SituationMinItems,
 		})
 	}
 
@@ -96,7 +154,12 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	httpserver.Mount(mux, sqlDB, pagesDir)
+	httpserver.Mount(mux, sqlDB, pagesDir, httpserver.ReaderConfig{
+		OllamaBaseURL:     cfg.OllamaBaseURL,
+		OllamaModel:       cfg.OllamaTranslate,
+		TargetLang:        cfg.TranslateTarget,
+		PaywallFetcherURL: cfg.PaywallFetcherURL,
+	})
 
 	srv := &http.Server{
 		Addr:              cfg.ListenAddr,
@@ -116,6 +179,10 @@ func main() {
 	<-stop
 
 	stopWorkers()
+
+	if ollamaMgr != nil {
+		ollamaMgr.Stop()
+	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

@@ -1,8 +1,19 @@
 # One RSS or Atom URL per line. Copy to feeds.txt and edit.
-# Many outlets publish English world desks; add non‑English feeds for sources you read (translation comes later).
+# Non-English feeds are auto-translated when OLLAMA_TRANSLATE_MODEL is set.
 
+# === Western / English ===
 https://feeds.bbci.co.uk/news/world/rss.xml
 https://rss.nytimes.com/services/xml/rss/nyt/World.xml
 https://www.theguardian.com/world/rss
-https://rss.dw.com/rdf/rss-en-world
-https://www.france24.com/en/rss
+https://www.aljazeera.com/xml/rss/all.xml
+
+# === East Asia ===
+https://www3.nhk.or.jp/rss/news/cat6.xml
+https://asia.nikkei.com/rss/feed/nar
+https://en.yna.co.kr/RSS/news.xml
+https://www.koreaherald.com/rss/020100000000.xml
+https://www.cgtn.com/subscribe/rss/section/world.xml
+
+# === South & Southeast Asia ===
+https://www.hindustantimes.com/feeds/rss/world-news/rssfeed.xml
+https://www.scmp.com/rss/91/feed
