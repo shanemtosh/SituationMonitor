@@ -520,6 +520,7 @@ type readerData struct {
 	CreatedAt       string
 	Content         string
 	Error           string
+	FetchFailed     bool
 	WasTranslated   bool
 	TranslatorModel string
 	ItemID          int64
@@ -600,7 +601,7 @@ func handleReader(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
 		})
 		if err != nil {
 			log.Printf("reader: fetch %d: %v", id, err)
-			data.Error = fmt.Sprintf("Could not fetch article: %v", err)
+			data.FetchFailed = true
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			_ = readerTmpl.Execute(w, data)
 			return

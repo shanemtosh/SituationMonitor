@@ -111,6 +111,32 @@
 		}
 		.content-notice { font-size: 0.9rem; color: var(--dim); padding: 1rem 0; font-style: italic; }
 		.content-notice a { color: var(--link); }
+		.external-notice {
+			padding: 1.5rem;
+			border: 1px solid var(--border);
+			border-radius: 8px;
+			text-align: center;
+		}
+		.external-notice p {
+			font-size: 0.9rem;
+			color: var(--dim);
+			margin-bottom: 0.75rem;
+		}
+		.external-link {
+			display: inline-block;
+			color: var(--link);
+			font-size: 0.95rem;
+			font-weight: 600;
+			text-decoration: none;
+			padding: 0.5rem 1.25rem;
+			border: 1px solid var(--link);
+			border-radius: 6px;
+			transition: background 0.15s, color 0.15s;
+		}
+		.external-link:hover {
+			background: var(--link);
+			color: var(--bg);
+		}
 
 		footer { font-size: 0.78rem; color: var(--dim); margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); }
 		.site-footer {
@@ -173,7 +199,12 @@
 		</div>
 	</div>
 
-	{{if .Error}}
+	{{if .FetchFailed}}
+	<div class="external-notice">
+		<p>This article is available on the publisher's site.</p>
+		{{if .URL}}<a href="{{.URL}}" rel="noopener" class="external-link">Read on {{if .FeedName}}{{.FeedName}}{{else}}original site{{end}}</a>{{end}}
+	</div>
+	{{else if .Error}}
 	<p class="error-msg">{{.Error}}</p>
 	{{else if .Content}}
 	<div class="article-content">{{.Content}}</div>
