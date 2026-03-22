@@ -78,7 +78,12 @@ func IngestAll(ctx context.Context, db *sql.DB, client *http.Client, parser *gof
 	var total int
 	var lastErr error
 	for _, u := range feedURLs {
-		n, err := ingestOne(ctx, db, client, parser, strings.TrimSpace(u), userAgent)
+		u = strings.TrimSpace(u)
+		// Skip non-HTTP feeds (e.g. treasury:// handled by dedicated scrapers)
+		if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+			continue
+		}
+		n, err := ingestOne(ctx, db, client, parser, u, userAgent)
 		total += n
 		if err != nil {
 			lastErr = err
@@ -96,6 +101,8 @@ func ingestOne(ctx context.Context, db *sql.DB, client *http.Client, parser *gof
 	if userAgent != "" {
 		req.Header.Set("User-Agent", userAgent)
 	}
+	req.Header.Set("Accept", "application/rss+xml, application/xml, text/xml, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	resp, err := client.Do(req)
 	if err != nil {
 		return 0, err
