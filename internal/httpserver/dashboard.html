@@ -191,6 +191,15 @@
 			padding: 0 0.3rem;
 			font-size: 0.72rem;
 		}
+		.region-tag {
+			display: inline-block;
+			background: var(--tag-bg);
+			border-radius: 3px;
+			padding: 0 0.3rem;
+			font-size: 0.7rem;
+			text-transform: uppercase;
+			letter-spacing: 0.03em;
+		}
 		.empty { color: var(--dim); font-style: italic; font-size: 0.9rem; padding: 1rem 0; }
 
 		/* Refresh indicator */
@@ -270,6 +279,20 @@
 				<option value="rss" {{if eq .Filter.SourceKind "rss"}}selected{{end}}>rss</option>
 				<option value="sweep" {{if eq .Filter.SourceKind "sweep"}}selected{{end}}>sweep</option>
 			</select></label>
+			<label>Region <select name="region">
+				<option value="" {{if eq .Filter.Region ""}}selected{{end}}>all</option>
+				<option value="us" {{if eq .Filter.Region "us"}}selected{{end}}>US</option>
+				<option value="uk" {{if eq .Filter.Region "uk"}}selected{{end}}>UK</option>
+				<option value="europe" {{if eq .Filter.Region "europe"}}selected{{end}}>Europe</option>
+				<option value="eeurope" {{if eq .Filter.Region "eeurope"}}selected{{end}}>E. Europe</option>
+				<option value="russia" {{if eq .Filter.Region "russia"}}selected{{end}}>Russia</option>
+				<option value="ukraine" {{if eq .Filter.Region "ukraine"}}selected{{end}}>Ukraine</option>
+				<option value="mideast" {{if eq .Filter.Region "mideast"}}selected{{end}}>Middle East</option>
+				<option value="asia" {{if eq .Filter.Region "asia"}}selected{{end}}>Asia</option>
+				<option value="latam" {{if eq .Filter.Region "latam"}}selected{{end}}>Latin America</option>
+				<option value="gov" {{if eq .Filter.Region "gov"}}selected{{end}}>US Gov</option>
+				<option value="tech" {{if eq .Filter.Region "tech"}}selected{{end}}>Tech</option>
+			</select></label>
 			<label>Min urgency <input type="number" name="min_u" min="0" max="5" value="{{.Filter.MinUrgency}}"></label>
 			<label>Hours <input type="number" name="hours" min="0" max="720" value="{{.Filter.Hours}}"></label>
 			<label>Limit <input type="number" name="limit" min="1" max="500" value="{{.Filter.Limit}}"></label>
@@ -282,7 +305,8 @@
 				{{if .Summary}}<div class="item-summary">{{.Summary}}</div>{{end}}
 				<div class="item-meta">
 					<span class="urgency-dot u{{.Urgency}}"></span>
-					<span>{{.SourceKind}}{{if .FeedName}} · {{.FeedName}}{{end}}</span>
+					<span>{{if .FeedName}}{{.FeedName}}{{else}}{{.SourceKind}}{{end}}</span>
+					{{if .Region}}<span class="region-tag">{{.Region}}</span>{{end}}
 					<span>{{.CreatedAt}}</span>
 					{{range .Tags}}<span class="tag">{{.}}</span>{{end}}
 				</div>

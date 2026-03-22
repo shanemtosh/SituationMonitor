@@ -186,6 +186,7 @@ type dashItem struct {
 	Summary    string
 	URL        string
 	FeedName   string
+	Region     string
 	Tags       []string
 }
 
@@ -235,7 +236,7 @@ func handleDashboard(db *sql.DB) http.HandlerFunc {
 			di = append(di, dashItem{
 				ID: it.ID, CreatedAt: it.CreatedAt, Urgency: it.Urgency, SourceKind: it.SourceKind,
 				Title: it.Title, TitleTrans: it.TitleTrans, Summary: summary, URL: it.URL,
-				FeedName: feedName(it.FeedURL), Tags: tags,
+				FeedName: feedName(it.FeedURL), Region: store.FeedRegionMap[it.FeedURL], Tags: tags,
 			})
 		}
 
@@ -247,36 +248,74 @@ func handleDashboard(db *sql.DB) http.HandlerFunc {
 // feedName extracts a short publication name from a feed URL.
 // e.g. "https://feeds.bbci.co.uk/news/world/rss.xml" → "BBC"
 var knownFeeds = map[string]string{
-	// General news
-	"bbci.co.uk":         "BBC",
-	"nytimes.com":        "NYT",
-	"theguardian.com":    "Guardian",
-	"reuters.com":        "Reuters",
-	"aljazeera.com":      "Al Jazeera",
-	"washingtonpost.com": "WaPo",
-	"cnbc.com":           "CNBC",
-	"cnn.com":            "CNN",
-	"npr.org":            "NPR",
-	"apnews.com":         "AP",
+	// Western / English
+	"bbci.co.uk/news/world": "BBC",
+	"bbci.co.uk/mundo":      "BBC Mundo",
+	"nytimes.com":           "NYT",
+	"theguardian.com":       "Guardian",
+	"reuters.com":           "Reuters",
+	"aljazeera.com":         "Al Jazeera",
+	"washingtonpost.com":    "WaPo",
+	"cnbc.com":              "CNBC",
+	"cnn.com":               "CNN",
+	"npr.org":               "NPR",
+	"apnews.com":            "AP",
+	// Europe
+	"france24.com":          "France 24",
+	"rfi.fr":                "RFI",
+	"lemonde.fr":            "Le Monde",
+	"dw.com":                "DW",
+	"spiegel.de":            "Der Spiegel",
+	"elpais.com":            "EL PAIS",
+	"ansa.it":               "ANSA",
+	"repubblica.it":         "La Repubblica",
+	"politico.eu":           "Politico EU",
+	"euobserver.com":        "EUobserver",
+	"euronews.com":          "Euronews",
+	// Eastern Europe & Russia
+	"themoscowtimes.com":    "Moscow Times",
+	"tass.com":              "TASS",
+	"ukrinform.net":         "Ukrinform",
+	"notesfrompoland.com":   "Notes from Poland",
+	"balkaninsight.com":     "Balkan Insight",
+	"feeds.yle.fi":          "YLE",
 	// Asia
-	"nhk.or.jp":          "NHK",
-	"nikkei.com":         "Nikkei",
-	"yna.co.kr":          "Yonhap",
-	"koreaherald.com":    "Korea Herald",
-	"cgtn.com":           "CGTN",
-	"hindustantimes.com": "Hindustan Times",
-	"scmp.com":           "SCMP",
-	"chinadaily.com.cn":  "China Daily",
-	"taipeitimes.com":    "Taipei Times",
+	"nhk.or.jp":             "NHK",
+	"nikkei.com":            "Nikkei",
+	"yna.co.kr":             "Yonhap",
+	"koreaherald.com":       "Korea Herald",
+	"cgtn.com":              "CGTN",
+	"hindustantimes.com":    "Hindustan Times",
+	"scmp.com":              "SCMP",
+	"chinadaily.com.cn":     "China Daily",
+	"taipeitimes.com":       "Taipei Times",
+	// Latin America
+	"batimes.com.ar":        "BA Times",
+	"caracaschronicles.com": "Caracas Chronicles",
+	"agenciabrasil.ebc.com.br/en": "Agencia Brasil",
+	"agenciabrasil.ebc.com.br/rss": "Agencia Brasil",
+	"latinamericareports.com": "LatAm Reports",
+	"lanacion.com.ar":       "La Nacion",
+	"infobae.com":           "Infobae",
+	"eltiempo.com":          "El Tiempo",
+	"eluniversal.com.mx":    "El Universal",
+	"latercera.com":         "La Tercera",
+	"efectococuyo.com":      "Efecto Cocuyo",
+	// US Government
+	"federalreserve.gov":    "Federal Reserve",
+	"whitehouse.gov":        "White House",
+	"census.gov":            "Census Bureau",
+	"bea.gov":               "BEA",
+	"treasury://":           "Treasury",
 	// Semiconductors & industry
-	"digitimes.com":      "DigiTimes",
-	"trendforce.com":     "TrendForce",
-	"eetimes.com":        "EE Times",
-	"semiengineering.com": "SemiEngineering",
-	"semianalysis":       "SemiAnalysis",
-	"kedglobal.com":      "KED Global",
+	"digitimes.com":         "DigiTimes",
+	"trendforce.com":        "TrendForce",
+	"eetimes.com":           "EE Times",
+	"semiengineering.com":   "SemiEngineering",
+	"semianalysis":          "SemiAnalysis",
+	"kedglobal.com":         "KED Global",
 	// Supply chain
-	"supplychaindive.com": "Supply Chain Dive",
+	"supplychaindive.com":   "Supply Chain Dive",
 }
 
 func feedName(feedURL string) string {
