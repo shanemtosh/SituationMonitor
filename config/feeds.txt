@@ -109,3 +109,15 @@ tech|https://www.kedglobal.com/newsRss
 # === Supply Chain & Manufacturing ===
 # Supply Chain Dive (English, global supply chain)
 tech|https://www.supplychaindive.com/feeds/news/
+
+# === US Government ===
+# Federal Reserve — FOMC statements, economic projections, monetary policy
+gov|https://www.federalreserve.gov/feeds/press_monetary.xml
+# Federal Reserve — official speeches (policy signals, economic outlook)
+gov|https://www.federalreserve.gov/feeds/speeches.xml
+# White House — executive orders, presidential memoranda (includes full text)
+gov|https://www.whitehouse.gov/presidential-actions/feed/
+# Census Bureau — monthly economic indicators (retail, housing, trade, manufacturing)
+gov|https://www.census.gov/economic-indicators/indicator.xml
+# BEA — GDP, trade balance, personal income releases
+gov|https://apps.bea.gov/rss/rss.xml
