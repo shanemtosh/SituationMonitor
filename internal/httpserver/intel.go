@@ -149,22 +149,25 @@ func handleBriefItem(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
 			})
 		}
 
-		// Call Ollama for synthesis (90s timeout)
+		// Call LLM for synthesis (90s timeout)
 		var synthesis string
-		if rc.OllamaModel != "" {
-			ctxOllama, cancel := context.WithTimeout(ctx, 90*time.Second)
-			defer cancel()
-			if len(ollamaRelated) > 0 {
-				synthesis, err = ollama.BriefOnItem(ctxOllama, rc.OllamaBaseURL, rc.OllamaModel, pivotTitle, pivotSummary, ollamaRelated)
-			} else {
-				// No related items — generate a standalone brief
-				synthesis, err = ollama.BriefOnItem(ctxOllama, rc.OllamaBaseURL, rc.OllamaModel, pivotTitle, pivotSummary, nil)
+		ctxBrief, cancelBrief := context.WithTimeout(ctx, 90*time.Second)
+		defer cancelBrief()
+
+		if rc.OpenRouterAPIKey != "" {
+			// Prefer OpenRouter for higher quality briefs
+			synthesis, err = ollama.BriefViaOpenRouter(ctxBrief, rc.OpenRouterAPIKey, rc.OpenRouterBaseURL, rc.BriefModel, pivotTitle, pivotSummary, ollamaRelated)
+			if err != nil {
+				synthesis = fmt.Sprintf("(synthesis unavailable: %v)", err)
 			}
+		} else if rc.OllamaModel != "" {
+			// Fall back to local Ollama
+			synthesis, err = ollama.BriefOnItem(ctxBrief, rc.OllamaBaseURL, rc.OllamaModel, pivotTitle, pivotSummary, ollamaRelated)
 			if err != nil {
 				synthesis = fmt.Sprintf("(synthesis unavailable: %v)", err)
 			}
 		} else {
-			synthesis = "Ollama not configured for synthesis."
+			synthesis = "No LLM configured for synthesis."
 		}
 
 		// Cache the result

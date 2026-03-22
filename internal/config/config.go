@@ -33,6 +33,8 @@ type Config struct {
 	NEROnStart       bool
 	SituationMinItems int
 
+	BriefModel string // model for AI briefs (OpenRouter or Ollama)
+
 	RSSFeedsFile     string
 	RSSPollInterval  time.Duration
 	RSSFetchTimeout  time.Duration
@@ -91,6 +93,8 @@ func Load() (Config, error) {
 		NERBatch:          ParseInt("NER_BATCH", 10),
 		NEROnStart:        ParseBool("NER_ON_START", true),
 		SituationMinItems: ParseInt("SITUATION_MIN_ITEMS", 4),
+
+		BriefModel: getEnv("BRIEF_MODEL", "deepseek/deepseek-chat-v3-0324"),
 
 		RSSFeedsFile:     getEnv("RSS_FEEDS_FILE", "config/feeds.txt"),
 		RSSPollInterval:  rssPoll,

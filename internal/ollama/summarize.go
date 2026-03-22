@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"situationmonitor/internal/openrouter"
 )
 
 // RelatedItem is a related news item used for contextual briefing.
@@ -19,13 +21,10 @@ type RelatedItem struct {
 	Age     string // e.g. "3h ago", "2d ago"
 }
 
-// BriefOnItem generates a contextual synthesis given a pivot item and related coverage.
-func BriefOnItem(ctx context.Context, baseURL, model, pivotTitle, pivotSummary string, related []RelatedItem) (string, error) {
-	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	if baseURL == "" || strings.TrimSpace(model) == "" {
-		return "", fmt.Errorf("ollama: missing base URL or model")
-	}
+const briefSystemPrompt = "You are an intelligence analyst producing concise situational briefings from multiple news sources. Write in plain text without markdown formatting — no bold, no headers, no bullet points. Use clear paragraphs."
 
+// buildBriefPrompt constructs the user prompt for brief generation.
+func buildBriefPrompt(pivotTitle, pivotSummary string, related []RelatedItem) string {
 	var sb strings.Builder
 	if len(related) > 0 {
 		sb.WriteString("Synthesize a brief intelligence summary about this topic based on multiple sources.\n\n")
@@ -49,13 +48,50 @@ func BriefOnItem(ctx context.Context, baseURL, model, pivotTitle, pivotSummary s
 		sb.WriteString("- Explain what happened and the context\n")
 		sb.WriteString("- Assess why this matters and potential implications\n")
 	}
-	sb.WriteString("\nBe direct and analytical. No preamble.")
+	sb.WriteString("\nBe direct and analytical. No preamble. No markdown formatting.")
+	return sb.String()
+}
+
+// BriefViaOpenRouter generates a brief using OpenRouter API.
+func BriefViaOpenRouter(ctx context.Context, apiKey, baseURL, model, pivotTitle, pivotSummary string, related []RelatedItem) (string, error) {
+	if strings.TrimSpace(apiKey) == "" {
+		return "", fmt.Errorf("openrouter: missing API key")
+	}
+	if model == "" {
+		model = "deepseek/deepseek-chat-v3-0324"
+	}
+	client := &openrouter.Client{
+		APIKey:  apiKey,
+		BaseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
+	}
+	text, err := client.ChatCompletion(ctx, openrouter.ChatRequest{
+		Model: model,
+		Messages: []openrouter.Message{
+			{Role: "system", Content: briefSystemPrompt},
+			{Role: "user", Content: buildBriefPrompt(pivotTitle, pivotSummary, related)},
+		},
+		Temperature: 0.3,
+	})
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(text), nil
+}
+
+// BriefOnItem generates a contextual synthesis given a pivot item and related coverage via Ollama.
+func BriefOnItem(ctx context.Context, baseURL, model, pivotTitle, pivotSummary string, related []RelatedItem) (string, error) {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" || strings.TrimSpace(model) == "" {
+		return "", fmt.Errorf("ollama: missing base URL or model")
+	}
+
+	prompt := buildBriefPrompt(pivotTitle, pivotSummary, related)
 
 	body, err := json.Marshal(map[string]any{
 		"model": model,
 		"messages": []map[string]string{
-			{"role": "system", "content": "You are an intelligence analyst producing concise situational briefings from multiple news sources."},
-			{"role": "user", "content": sb.String()},
+			{"role": "system", "content": briefSystemPrompt},
+			{"role": "user", "content": prompt},
 		},
 		"stream": false,
 		"options": map[string]any{

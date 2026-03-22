@@ -83,15 +83,24 @@
 			border-top: 1px solid var(--border);
 		}
 
-		.brief-section { margin-bottom: 1.5rem; }
-		.brief-section h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); margin-bottom: 0.5rem; }
+		.brief-section {
+			margin-bottom: 1.5rem;
+			background: color-mix(in srgb, var(--link) 8%, var(--bg));
+			border-left: 3px solid var(--link);
+			border-radius: 4px;
+			padding: 1rem 1.25rem;
+		}
+		.brief-section h3 {
+			font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em;
+			color: var(--link); margin-bottom: 0.75rem; font-weight: 600;
+		}
 		.brief-btn {
 			background: var(--link); color: #fff; border: none; padding: 0.5rem 1rem;
 			border-radius: 4px; cursor: pointer; font-size: 0.85rem;
 		}
 		.brief-btn:hover { opacity: 0.85; }
 		.brief-btn:disabled { opacity: 0.5; cursor: wait; }
-		.brief-content { font-size: 0.9rem; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; }
+		.brief-content { font-size: 0.9rem; line-height: 1.7; white-space: pre-wrap; word-wrap: break-word; }
 		.content-notice { font-size: 0.9rem; color: var(--dim); padding: 1rem 0; font-style: italic; }
 		.content-notice a { color: var(--link); }
 
@@ -155,6 +164,13 @@
 	</footer>
 
 	<script>
+	function renderBrief(text) {
+		// Convert **bold** to <strong>, strip other markdown
+		return text
+			.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+			.replace(/\*(.+?)\*/g, '<em>$1</em>')
+			.replace(/^#{1,3}\s+(.+)$/gm, '<strong>$1</strong>');
+	}
 	function briefMe(id) {
 		var btn = document.getElementById('brief-btn');
 		var result = document.getElementById('brief-result');
@@ -163,7 +179,7 @@
 		fetch('/api/brief/' + id)
 			.then(function(r) { return r.json(); })
 			.then(function(d) {
-				result.textContent = d.summary || 'No brief available.';
+				result.innerHTML = renderBrief(d.summary || 'No brief available.');
 				result.style.display = 'block';
 				btn.style.display = 'none';
 			})
@@ -172,6 +188,13 @@
 				btn.disabled = false;
 			});
 	}
+	// Also render existing brief content on page load
+	(function(){
+		var el = document.querySelector('.brief-content');
+		if (el && el.textContent.trim()) {
+			el.innerHTML = renderBrief(el.textContent);
+		}
+	})();
 	(function(){
 		var SUN='<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
 		var MOON='<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>';

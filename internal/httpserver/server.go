@@ -32,6 +32,12 @@ type ReaderConfig struct {
 	OllamaModel       string
 	TargetLang        string
 	PaywallFetcherURL string // e.g. "http://127.0.0.1:3100" — empty disables
+
+	// Brief generation: if OpenRouterAPIKey is set, use OpenRouter for briefs.
+	// Otherwise fall back to Ollama.
+	OpenRouterAPIKey  string
+	OpenRouterBaseURL string
+	BriefModel        string // e.g. "deepseek/deepseek-chat-v3-0324"
 }
 
 // Mount registers HTTP routes on mux. pagesDir is the directory where

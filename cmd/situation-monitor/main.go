@@ -159,6 +159,9 @@ func main() {
 		OllamaModel:       cfg.OllamaTranslate,
 		TargetLang:        cfg.TranslateTarget,
 		PaywallFetcherURL: cfg.PaywallFetcherURL,
+		OpenRouterAPIKey:  cfg.OpenRouterAPIKey,
+		OpenRouterBaseURL: cfg.OpenRouterBaseURL,
+		BriefModel:        cfg.BriefModel,
 	})
 
 	srv := &http.Server{
