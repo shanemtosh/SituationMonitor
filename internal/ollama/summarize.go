@@ -58,7 +58,7 @@ func BriefViaOpenRouter(ctx context.Context, apiKey, baseURL, model, pivotTitle,
 		return "", fmt.Errorf("openrouter: missing API key")
 	}
 	if model == "" {
-		model = "deepseek/deepseek-chat-v3-0324"
+		model = "deepseek/deepseek-v3.2"
 	}
 	client := &openrouter.Client{
 		APIKey:  apiKey,

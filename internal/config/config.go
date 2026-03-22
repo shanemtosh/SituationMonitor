@@ -94,7 +94,7 @@ func Load() (Config, error) {
 		NEROnStart:        ParseBool("NER_ON_START", true),
 		SituationMinItems: ParseInt("SITUATION_MIN_ITEMS", 4),
 
-		BriefModel: getEnv("BRIEF_MODEL", "deepseek/deepseek-chat-v3-0324"),
+		BriefModel: getEnv("BRIEF_MODEL", "deepseek/deepseek-v3.2"),
 
 		RSSFeedsFile:     getEnv("RSS_FEEDS_FILE", "config/feeds.txt"),
 		RSSPollInterval:  rssPoll,
