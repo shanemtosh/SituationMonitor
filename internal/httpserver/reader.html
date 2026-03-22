@@ -42,12 +42,26 @@
 		header h1 { font-size: 1.2rem; line-height: 1.35; margin-bottom: 0.4rem; }
 		.meta { font-size: 0.8rem; color: var(--dim); display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 		.meta a { color: var(--link); }
-		.original-link {
-			display: inline-block;
-			font-size: 0.82rem;
-			color: var(--link);
+		.header-links {
+			display: flex;
+			gap: 1rem;
+			align-items: center;
 			margin-top: 0.5rem;
+			font-size: 0.82rem;
 		}
+		.header-links a { color: var(--link); text-decoration: none; }
+		.header-links a:hover { text-decoration: underline; }
+		.brief-link {
+			color: var(--link);
+			background: none;
+			border: none;
+			cursor: pointer;
+			font-size: 0.82rem;
+			font-family: inherit;
+			padding: 0;
+		}
+		.brief-link:hover { text-decoration: underline; }
+		.brief-link:disabled { opacity: 0.5; cursor: wait; text-decoration: none; }
 
 		.summary {
 			font-size: 0.92rem;
@@ -57,6 +71,19 @@
 			border-bottom: 1px solid var(--border);
 			margin-bottom: 1.5rem;
 		}
+
+		.brief-section {
+			margin-bottom: 1.5rem;
+			background: color-mix(in srgb, var(--link) 8%, var(--bg));
+			border-left: 3px solid var(--link);
+			border-radius: 4px;
+			padding: 1rem 1.25rem;
+		}
+		.brief-section h3 {
+			font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em;
+			color: var(--link); margin-bottom: 0.75rem; font-weight: 600;
+		}
+		.brief-content { font-size: 0.9rem; line-height: 1.7; white-space: pre-wrap; word-wrap: break-word; }
 
 		.article-content {
 			font-size: 0.95rem;
@@ -82,25 +109,6 @@
 			padding-top: 0.75rem;
 			border-top: 1px solid var(--border);
 		}
-
-		.brief-section {
-			margin-bottom: 1.5rem;
-			background: color-mix(in srgb, var(--link) 8%, var(--bg));
-			border-left: 3px solid var(--link);
-			border-radius: 4px;
-			padding: 1rem 1.25rem;
-		}
-		.brief-section h3 {
-			font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em;
-			color: var(--link); margin-bottom: 0.75rem; font-weight: 600;
-		}
-		.brief-btn {
-			background: var(--link); color: #fff; border: none; padding: 0.5rem 1rem;
-			border-radius: 4px; cursor: pointer; font-size: 0.85rem;
-		}
-		.brief-btn:hover { opacity: 0.85; }
-		.brief-btn:disabled { opacity: 0.5; cursor: wait; }
-		.brief-content { font-size: 0.9rem; line-height: 1.7; white-space: pre-wrap; word-wrap: break-word; }
 		.content-notice { font-size: 0.9rem; color: var(--dim); padding: 1rem 0; font-style: italic; }
 		.content-notice a { color: var(--link); }
 
@@ -127,7 +135,10 @@
 			<span>{{.CreatedAt}}</span>
 			{{if .Lang}}<span>{{.Lang}}</span>{{end}}
 		</div>
-		{{if .URL}}<a class="original-link" href="{{.URL}}" rel="noopener">View original</a>{{end}}
+		<div class="header-links">
+			{{if .URL}}<a href="{{.URL}}" rel="noopener">View original</a>{{end}}
+			{{if and (not .BriefText) .ItemID}}<button id="brief-btn" class="brief-link" onclick="briefMe({{.ItemID}})">AI brief</button>{{end}}
+		</div>
 	</header>
 
 	{{if .DisplaySummary}}
@@ -139,12 +150,13 @@
 		<h3>AI Brief</h3>
 		<div class="brief-content">{{.BriefText}}</div>
 	</div>
-	{{else if .ItemID}}
-	<div class="brief-section">
-		<button id="brief-btn" class="brief-btn" onclick="briefMe({{.ItemID}})">Brief me on this</button>
-		<div id="brief-result" class="brief-content" style="display:none"></div>
-	</div>
 	{{end}}
+	<div id="brief-container" style="display:none">
+		<div class="brief-section">
+			<h3>AI Brief</h3>
+			<div id="brief-result" class="brief-content"></div>
+		</div>
+	</div>
 
 	{{if .Error}}
 	<p class="error-msg">{{.Error}}</p>
@@ -165,7 +177,6 @@
 
 	<script>
 	function renderBrief(text) {
-		// Convert **bold** to <strong>, strip other markdown
 		return text
 			.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
 			.replace(/\*(.+?)\*/g, '<em>$1</em>')
@@ -173,22 +184,22 @@
 	}
 	function briefMe(id) {
 		var btn = document.getElementById('brief-btn');
+		var container = document.getElementById('brief-container');
 		var result = document.getElementById('brief-result');
 		btn.disabled = true;
-		btn.textContent = 'Generating brief…';
+		btn.textContent = 'Generating…';
 		fetch('/api/brief/' + id)
 			.then(function(r) { return r.json(); })
 			.then(function(d) {
 				result.innerHTML = renderBrief(d.summary || 'No brief available.');
-				result.style.display = 'block';
+				container.style.display = 'block';
 				btn.style.display = 'none';
 			})
 			.catch(function(e) {
-				btn.textContent = 'Brief failed — try again';
+				btn.textContent = 'AI brief';
 				btn.disabled = false;
 			});
 	}
-	// Also render existing brief content on page load
 	(function(){
 		var el = document.querySelector('.brief-content');
 		if (el && el.textContent.trim()) {
