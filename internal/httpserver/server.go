@@ -26,6 +26,16 @@ var dashboardHTML string
 
 var dashboardTmpl = template.Must(template.New("dash").Parse(dashboardHTML))
 
+//go:embed about.html
+var aboutHTML string
+
+var aboutTmpl = template.Must(template.New("about").Parse(aboutHTML))
+
+//go:embed legal.html
+var legalHTML string
+
+var legalTmpl = template.Must(template.New("legal").Parse(legalHTML))
+
 // ReaderConfig holds settings for on-demand article fetching and translation.
 type ReaderConfig struct {
 	OllamaBaseURL     string
@@ -53,6 +63,10 @@ func Mount(mux *http.ServeMux, db *sql.DB, pagesDir string, rc ReaderConfig) {
 	mux.HandleFunc("GET /api/sweeps", handleSweepsJSON(db))
 	mux.HandleFunc("GET /daily/", handleDailyIndex(pagesDir))
 	mux.HandleFunc("GET /daily/{date}", handleDailyPage(pagesDir))
+	mux.HandleFunc("GET /about", handleAbout())
+	mux.HandleFunc("GET /terms", handleLegalPage("Terms of Use", termsBody))
+	mux.HandleFunc("GET /privacy", handleLegalPage("Privacy Policy", privacyBody))
+	mux.HandleFunc("GET /content-notice", handleLegalPage("Content Notice", contentNoticeBody))
 	mux.HandleFunc("GET /read/{id}", handleReader(db, rc))
 	mux.HandleFunc("GET /api/brief/{id}", handleBriefItem(db, rc))
 	mux.HandleFunc("GET /api/situations", handleSituationsJSON(db))
@@ -595,3 +609,108 @@ func isInternalRequest(r *http.Request) bool {
 	}
 	return false
 }
+
+func handleAbout() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_ = aboutTmpl.Execute(w, nil)
+	}
+}
+
+type legalPage struct {
+	Title    string
+	BodyHTML template.HTML
+}
+
+func handleLegalPage(title string, body template.HTML) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_ = legalTmpl.Execute(w, legalPage{Title: title, BodyHTML: body})
+	}
+}
+
+const termsBody template.HTML = `
+<p>Last updated: March 2026</p>
+
+<h2>Acceptance</h2>
+<p>By accessing Situation Monitor, you agree to these terms. If you do not agree, please do not use the service.</p>
+
+<h2>Service Description</h2>
+<p>Situation Monitor is a news aggregation and monitoring tool operated by Mimir. It collects and displays publicly available information from RSS feeds, social media platforms, and market data providers for informational purposes only.</p>
+
+<h2>No Warranty</h2>
+<p>The service is provided "as is" without warranty of any kind. We make no guarantees about the accuracy, completeness, or timeliness of the information displayed. Content is sourced from third parties and may contain errors.</p>
+
+<h2>Not Financial or Professional Advice</h2>
+<p>Nothing on this service constitutes financial, investment, legal, or other professional advice. Market data is provided for informational purposes only and may be delayed. Always consult qualified professionals before making decisions based on information found here.</p>
+
+<h2>AI-Generated Content</h2>
+<p>Some content, including daily briefings and article summaries, is generated or processed by AI systems. AI-generated content may contain inaccuracies or misinterpretations of source material. Always verify important information against original sources.</p>
+
+<h2>Limitation of Liability</h2>
+<p>To the fullest extent permitted by law, Mimir shall not be liable for any damages arising from your use of or inability to use this service.</p>
+
+<h2>Changes</h2>
+<p>We may update these terms at any time. Continued use of the service constitutes acceptance of the updated terms.</p>
+
+<h2>Contact</h2>
+<p>Questions about these terms? Email <a href="mailto:shane@mto.sh">shane@mto.sh</a></p>
+`
+
+const privacyBody template.HTML = `
+<p>Last updated: March 2026</p>
+
+<h2>Overview</h2>
+<p>Situation Monitor is operated by Mimir. We take privacy seriously and collect minimal data.</p>
+
+<h2>What We Collect</h2>
+<ul>
+	<li><strong>Server logs:</strong> Standard HTTP access logs (IP address, user agent, pages visited) for security and debugging. These are retained for a limited time and not shared with third parties.</li>
+	<li><strong>Local storage:</strong> Your theme preference (light/dark mode) is stored in your browser's local storage. This never leaves your device.</li>
+</ul>
+
+<h2>What We Don't Collect</h2>
+<ul>
+	<li>No cookies or tracking pixels</li>
+	<li>No analytics or advertising scripts</li>
+	<li>No personal accounts or user profiles</li>
+	<li>No data shared with or sold to third parties</li>
+</ul>
+
+<h2>Third-Party Content</h2>
+<p>This service displays content from third-party sources (news publishers, social media platforms, market data providers). When you click through to an original source, that publisher's own privacy policy applies.</p>
+
+<h2>AI Processing</h2>
+<p>Content is processed by AI systems (Ollama, OpenRouter) for entity extraction, translation, and summarization. This processing happens server-side; your browsing activity is not sent to AI providers.</p>
+
+<h2>Contact</h2>
+<p>Privacy questions? Email <a href="mailto:shane@mto.sh">shane@mto.sh</a></p>
+`
+
+const contentNoticeBody template.HTML = `
+<p>Last updated: March 2026</p>
+
+<h2>Third-Party Content</h2>
+<p>Situation Monitor aggregates and displays content from third-party sources including news publishers, social media platforms, and market data providers. All such content remains the property of its respective owners and publishers.</p>
+
+<h2>No Claim of Ownership</h2>
+<p>Mimir does not claim ownership, copyright, or any proprietary rights over content produced by third-party publishers. Headlines, summaries, and article text displayed on this service are sourced from publicly available RSS feeds and are attributed to their original publishers.</p>
+
+<h2>Fair Use and Attribution</h2>
+<p>Content is displayed for personal, non-commercial, informational purposes. We provide attribution to original sources wherever possible, including publisher names, article links, and timestamps. We encourage users to visit original sources for complete reporting.</p>
+
+<h2>AI-Generated Summaries</h2>
+<p>AI-generated summaries, briefings, and translations are derivative works produced for personal informational use. These are not intended to substitute for or replace the original reporting. Original source links are provided so users can access the full, authoritative content from publishers.</p>
+
+<h2>Market Data</h2>
+<p>Market quotes and financial data are sourced from third-party providers and may be delayed. This data is provided for informational purposes only and should not be relied upon for trading decisions.</p>
+
+<h2>Social Media Content</h2>
+<p>Social media content displayed in sweeps is collected from public posts and represents the views of the original authors, not Mimir or Situation Monitor.</p>
+
+<h2>Takedown Requests</h2>
+<p>If you are a content owner and believe your content is being displayed inappropriately, please contact <a href="mailto:shane@mto.sh">shane@mto.sh</a> and we will address your concern promptly.</p>
+
+<h2>DMCA</h2>
+<p>We respect intellectual property rights. If you believe content on this service infringes your copyright, please send a notice to <a href="mailto:shane@mto.sh">shane@mto.sh</a> including identification of the copyrighted work, the infringing material and its location on our service, and your contact information.</p>
+`

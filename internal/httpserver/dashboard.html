@@ -40,7 +40,7 @@
 			color: inherit; display: flex; align-items: center;
 		}
 		.theme-btn:hover { opacity: 1; }
-		.theme-btn svg { width: 16px; height: 16px; fill: currentColor; }
+		.theme-btn svg { width: 16px; height: 16px; fill: currentColor; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 
 		/* Header */
 		h1 { font-size: 1.25rem; margin-bottom: 0.25rem; }
@@ -211,15 +211,21 @@
 			100% { transform: scaleX(1); opacity: 0; }
 		}
 
-		/* API links */
-		.api-links {
+		/* Footer */
+		.site-footer {
 			font-size: 0.75rem;
 			color: var(--dim);
 			padding-top: 1rem;
+			margin-top: 2rem;
 			border-top: 1px solid var(--border);
+			display: flex;
+			gap: 0.75rem;
+			align-items: center;
+			flex-wrap: wrap;
 		}
-		.api-links a { color: var(--dim); margin-right: 0.75rem; }
-		.api-links a:hover { color: var(--fg); }
+		.site-footer a { color: var(--dim); text-decoration: none; }
+		.site-footer a:hover { color: var(--fg); }
+		.footer-spacer { flex: 1; }
 
 		/* Auto-refresh disabled by dark mode override — keep same vars */
 		@media (prefers-color-scheme: dark) {
@@ -232,6 +238,7 @@
 	<nav>
 		<a href="/" class="active">Feed</a>
 		<a href="/daily/">Briefings</a>
+		<a href="/about">About</a>
 		<span class="nav-spacer"></span>
 		<button class="theme-btn" id="theme-toggle" title="Toggle theme"></button>
 	</nav>
@@ -286,12 +293,13 @@
 		</ul>
 	</section>
 
-	<div class="api-links">
-		<a href="/api/items">items</a>
-		<a href="/api/markets">markets</a>
-		<a href="/api/sweeps">sweeps</a>
-		<a href="/health">health</a>
-	</div>
+	<footer class="site-footer">
+		<span>&copy; 2026 Mimir</span>
+		<span class="footer-spacer"></span>
+		<a href="/terms">Terms</a>
+		<a href="/privacy">Privacy</a>
+		<a href="/content-notice">Content Notice</a>
+	</footer>
 
 	<script>
 	(function(){

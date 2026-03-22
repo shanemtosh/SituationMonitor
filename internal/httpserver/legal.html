@@ -3,13 +3,13 @@
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>Briefings — Situation Monitor</title>
+	<title>{{.Title}} — Situation Monitor</title>
 	<style>
-		:root { color-scheme: dark light; --bg: #fff; --fg: #111; --dim: #888; --border: #ddd; --item-border: #eee; }
+		:root { color-scheme: dark light; --bg: #fff; --fg: #111; --dim: #888; --border: #ddd; --link: #0b5fff; }
 		* { box-sizing: border-box; margin: 0; padding: 0; }
 		body {
 			font-family: system-ui, -apple-system, sans-serif;
-			line-height: 1.5;
+			line-height: 1.6;
 			padding: 1rem 1rem 4rem;
 			max-width: 720px;
 			margin: 0 auto;
@@ -17,7 +17,7 @@
 			background: var(--bg);
 			color: var(--fg);
 		}
-		body.dark { --bg: #111; --fg: #e8e8e8; --dim: #777; --border: #333; --item-border: #222; }
+		body.dark { --bg: #111; --fg: #e8e8e8; --dim: #777; --border: #333; --link: #6af; }
 		nav {
 			display: flex;
 			gap: 0.75rem;
@@ -38,19 +38,12 @@
 		}
 		.theme-btn:hover { opacity: 1; }
 		.theme-btn svg { width: 16px; height: 16px; fill: currentColor; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
-		h1 { font-size: 1.25rem; margin-bottom: 1.5rem; }
-		ul { list-style: none; }
-		li { border-bottom: 1px solid var(--item-border); }
-		li a {
-			display: block;
-			padding: 0.75rem 0;
-			text-decoration: none;
-			color: inherit;
-			font-weight: 600;
-			font-size: 1rem;
-		}
-		li a:hover { opacity: 0.7; }
-		.empty { color: var(--dim); font-style: italic; font-size: 0.9rem; padding: 1rem 0; }
+		h1 { font-size: 1.25rem; margin-bottom: 1.25rem; }
+		h2 { font-size: 1rem; margin: 1.5rem 0 0.5rem; }
+		p { margin-bottom: 0.75rem; font-size: 0.95rem; }
+		a { color: var(--link); }
+		ul { margin-left: 1.25rem; margin-bottom: 0.75rem; font-size: 0.95rem; }
+		li { margin-bottom: 0.25rem; }
 		.site-footer {
 			font-size: 0.75rem;
 			color: var(--dim);
@@ -66,27 +59,21 @@
 		.site-footer a:hover { color: var(--fg); }
 		.footer-spacer { flex: 1; }
 		@media (prefers-color-scheme: dark) {
-			:root:not(.light-forced) { --bg: #111; --fg: #e8e8e8; --dim: #777; --border: #333; --item-border: #222; }
+			:root:not(.light-forced) { --bg: #111; --fg: #e8e8e8; --dim: #777; --border: #333; --link: #6af; }
 		}
 	</style>
 </head>
 <body>
 	<nav>
 		<a href="/">Feed</a>
-		<a href="/daily/" class="active">Briefings</a>
+		<a href="/daily/">Briefings</a>
 		<a href="/about">About</a>
 		<span class="nav-spacer"></span>
 		<button class="theme-btn" id="theme-toggle"></button>
 	</nav>
 
-	<h1>Daily Briefings</h1>
-	{{if .}}
-	<ul>
-		{{range .}}<li><a href="{{.URL}}">{{.Date}}</a></li>{{end}}
-	</ul>
-	{{else}}
-	<p class="empty">No briefings generated yet.</p>
-	{{end}}
+	<h1>{{.Title}}</h1>
+	{{.BodyHTML}}
 
 	<div class="site-footer">
 		<span>&copy; 2026 Mimir</span>
