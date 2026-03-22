@@ -21,14 +21,19 @@ type RelatedItem struct {
 	Age     string // e.g. "3h ago", "2d ago"
 }
 
-const briefSystemPrompt = "You are an intelligence analyst producing concise situational briefings from multiple news sources. Write in plain text without markdown formatting — no bold, no headers, no bullet points. Use clear paragraphs."
+const briefSystemPrompt = "You are an intelligence analyst producing concise situational briefings from multiple news sources. Write in plain text without markdown formatting — no bold, no headers, no bullet points. Use clear paragraphs. IMPORTANT: Only state facts that are explicitly present in the provided text. Do not infer, assume, or fabricate details that are not in the source material. If the provided text is incomplete or truncated, base your analysis only on what is available."
 
 // buildBriefPrompt constructs the user prompt for brief generation.
-func buildBriefPrompt(pivotTitle, pivotSummary string, related []RelatedItem) string {
+func buildBriefPrompt(pivotTitle, pivotSummary, pivotSource string, related []RelatedItem) string {
 	var sb strings.Builder
 	if len(related) > 0 {
 		sb.WriteString("Synthesize a brief intelligence summary about this topic based on multiple sources.\n\n")
-		sb.WriteString(fmt.Sprintf("PRIMARY ITEM:\nTitle: %s\nSummary: %s\n\n", pivotTitle, pivotSummary))
+		sb.WriteString("PRIMARY ITEM:\n")
+		sb.WriteString(fmt.Sprintf("Title: %s\n", pivotTitle))
+		if pivotSource != "" {
+			sb.WriteString(fmt.Sprintf("Source: %s\n", pivotSource))
+		}
+		sb.WriteString(fmt.Sprintf("Content: %s\n\n", pivotSummary))
 		sb.WriteString("RELATED COVERAGE:\n")
 		for i, r := range related {
 			if i >= 20 {
@@ -37,23 +42,27 @@ func buildBriefPrompt(pivotTitle, pivotSummary string, related []RelatedItem) st
 			sb.WriteString(fmt.Sprintf("%d. [%s, %s] %s — %s\n", i+1, r.Source, r.Age, r.Title, r.Summary))
 		}
 		sb.WriteString("\nWrite a 3-5 paragraph synthesis that:\n")
-		sb.WriteString("- Explains the core situation\n")
+		sb.WriteString("- Explains the core situation based on what the sources actually say\n")
 		sb.WriteString("- Notes where sources agree or differ\n")
 		sb.WriteString("- Highlights what changed most recently\n")
 		sb.WriteString("- Assesses why this matters\n")
 	} else {
 		sb.WriteString("Write a brief intelligence-style analysis of this news item.\n\n")
-		sb.WriteString(fmt.Sprintf("Title: %s\nSummary: %s\n\n", pivotTitle, pivotSummary))
+		sb.WriteString(fmt.Sprintf("Title: %s\n", pivotTitle))
+		if pivotSource != "" {
+			sb.WriteString(fmt.Sprintf("Source: %s\n", pivotSource))
+		}
+		sb.WriteString(fmt.Sprintf("Content: %s\n\n", pivotSummary))
 		sb.WriteString("Write 2-3 paragraphs that:\n")
-		sb.WriteString("- Explain what happened and the context\n")
+		sb.WriteString("- Explain what happened and the context based on what the article actually says\n")
 		sb.WriteString("- Assess why this matters and potential implications\n")
 	}
-	sb.WriteString("\nBe direct and analytical. No preamble. No markdown formatting.")
+	sb.WriteString("\nBe direct and analytical. No preamble. No markdown formatting. Do not assume or fabricate details not present in the source text.")
 	return sb.String()
 }
 
 // BriefViaOpenRouter generates a brief using OpenRouter API.
-func BriefViaOpenRouter(ctx context.Context, apiKey, baseURL, model, pivotTitle, pivotSummary string, related []RelatedItem) (string, error) {
+func BriefViaOpenRouter(ctx context.Context, apiKey, baseURL, model, pivotTitle, pivotSummary, pivotSource string, related []RelatedItem) (string, error) {
 	if strings.TrimSpace(apiKey) == "" {
 		return "", fmt.Errorf("openrouter: missing API key")
 	}
@@ -68,7 +77,7 @@ func BriefViaOpenRouter(ctx context.Context, apiKey, baseURL, model, pivotTitle,
 		Model: model,
 		Messages: []openrouter.Message{
 			{Role: "system", Content: briefSystemPrompt},
-			{Role: "user", Content: buildBriefPrompt(pivotTitle, pivotSummary, related)},
+			{Role: "user", Content: buildBriefPrompt(pivotTitle, pivotSummary, pivotSource, related)},
 		},
 		Temperature: 0.3,
 	})
@@ -79,13 +88,13 @@ func BriefViaOpenRouter(ctx context.Context, apiKey, baseURL, model, pivotTitle,
 }
 
 // BriefOnItem generates a contextual synthesis given a pivot item and related coverage via Ollama.
-func BriefOnItem(ctx context.Context, baseURL, model, pivotTitle, pivotSummary string, related []RelatedItem) (string, error) {
+func BriefOnItem(ctx context.Context, baseURL, model, pivotTitle, pivotSummary, pivotSource string, related []RelatedItem) (string, error) {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" || strings.TrimSpace(model) == "" {
 		return "", fmt.Errorf("ollama: missing base URL or model")
 	}
 
-	prompt := buildBriefPrompt(pivotTitle, pivotSummary, related)
+	prompt := buildBriefPrompt(pivotTitle, pivotSummary, pivotSource, related)
 
 	body, err := json.Marshal(map[string]any{
 		"model": model,

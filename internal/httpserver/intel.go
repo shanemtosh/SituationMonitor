@@ -121,15 +121,26 @@ func handleBriefItem(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
 		// Get situations for this item
 		situations, _ := store.GetItemSituations(ctx, db, id)
 
-		// Build Ollama input
+		// Build Ollama input — prefer full content over truncated summary
 		pivotTitle := item.TitleTranslated
 		if pivotTitle == "" {
 			pivotTitle = item.Title
 		}
-		pivotSummary := item.SummaryTranslated
+		pivotSummary := item.ContentTranslated
+		if pivotSummary == "" {
+			pivotSummary = item.ContentText
+		}
+		if pivotSummary == "" {
+			pivotSummary = item.SummaryTranslated
+		}
 		if pivotSummary == "" {
 			pivotSummary = item.Summary
 		}
+		// Cap content for LLM context
+		if len(pivotSummary) > 6000 {
+			pivotSummary = pivotSummary[:6000] + "…"
+		}
+		pivotSource := feedName(item.FeedURL)
 
 		ollamaRelated := make([]ollama.RelatedItem, 0, len(relItems))
 		for _, ri := range relItems {
@@ -156,13 +167,13 @@ func handleBriefItem(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
 
 		if rc.OpenRouterAPIKey != "" {
 			// Prefer OpenRouter for higher quality briefs
-			synthesis, err = ollama.BriefViaOpenRouter(ctxBrief, rc.OpenRouterAPIKey, rc.OpenRouterBaseURL, rc.BriefModel, pivotTitle, pivotSummary, ollamaRelated)
+			synthesis, err = ollama.BriefViaOpenRouter(ctxBrief, rc.OpenRouterAPIKey, rc.OpenRouterBaseURL, rc.BriefModel, pivotTitle, pivotSummary, pivotSource, ollamaRelated)
 			if err != nil {
 				synthesis = fmt.Sprintf("(synthesis unavailable: %v)", err)
 			}
 		} else if rc.OllamaModel != "" {
 			// Fall back to local Ollama
-			synthesis, err = ollama.BriefOnItem(ctxBrief, rc.OllamaBaseURL, rc.OllamaModel, pivotTitle, pivotSummary, ollamaRelated)
+			synthesis, err = ollama.BriefOnItem(ctxBrief, rc.OllamaBaseURL, rc.OllamaModel, pivotTitle, pivotSummary, pivotSource, ollamaRelated)
 			if err != nil {
 				synthesis = fmt.Sprintf("(synthesis unavailable: %v)", err)
 			}
