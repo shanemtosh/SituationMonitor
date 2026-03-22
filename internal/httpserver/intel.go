@@ -136,11 +136,17 @@ func handleBriefItem(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
 		if pivotSummary == "" {
 			pivotSummary = item.Summary
 		}
-		// Cap content for LLM context
-		if len(pivotSummary) > 6000 {
-			pivotSummary = pivotSummary[:6000] + "…"
-		}
 		pivotSource := feedName(item.FeedURL)
+
+		// Build entity and situation context from the knowledge graph
+		var entityNames []string
+		for _, e := range entities {
+			entityNames = append(entityNames, fmt.Sprintf("%s (%s)", e.Name, e.Kind))
+		}
+		var situationNames []string
+		for _, s := range situations {
+			situationNames = append(situationNames, fmt.Sprintf("%s [%s]", s.Name, s.Status))
+		}
 
 		ollamaRelated := make([]ollama.RelatedItem, 0, len(relItems))
 		for _, ri := range relItems {
@@ -165,15 +171,24 @@ func handleBriefItem(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
 		ctxBrief, cancelBrief := context.WithTimeout(ctx, 90*time.Second)
 		defer cancelBrief()
 
+		briefCtx := ollama.BriefContext{
+			Title:      pivotTitle,
+			Content:    pivotSummary,
+			Source:     pivotSource,
+			Entities:   entityNames,
+			Situations: situationNames,
+			Related:    ollamaRelated,
+		}
+
 		if rc.OpenRouterAPIKey != "" {
 			// Prefer OpenRouter for higher quality briefs
-			synthesis, err = ollama.BriefViaOpenRouter(ctxBrief, rc.OpenRouterAPIKey, rc.OpenRouterBaseURL, rc.BriefModel, pivotTitle, pivotSummary, pivotSource, ollamaRelated)
+			synthesis, err = ollama.BriefViaOpenRouter(ctxBrief, rc.OpenRouterAPIKey, rc.OpenRouterBaseURL, rc.BriefModel, briefCtx)
 			if err != nil {
 				synthesis = fmt.Sprintf("(synthesis unavailable: %v)", err)
 			}
 		} else if rc.OllamaModel != "" {
 			// Fall back to local Ollama
-			synthesis, err = ollama.BriefOnItem(ctxBrief, rc.OllamaBaseURL, rc.OllamaModel, pivotTitle, pivotSummary, pivotSource, ollamaRelated)
+			synthesis, err = ollama.BriefOnItem(ctxBrief, rc.OllamaBaseURL, rc.OllamaModel, briefCtx)
 			if err != nil {
 				synthesis = fmt.Sprintf("(synthesis unavailable: %v)", err)
 			}
