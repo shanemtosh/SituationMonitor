@@ -4,6 +4,44 @@ https://rss.nytimes.com/services/xml/rss/nyt/World.xml
 https://www.theguardian.com/world/rss
 https://www.aljazeera.com/xml/rss/all.xml
 
+# === Europe ===
+# France 24 (English, French state intl broadcaster)
+https://www.france24.com/en/rss
+# RFI (English, French public radio — strong Africa/francophone coverage)
+https://www.rfi.fr/en/rss
+# Le Monde (English edition)
+https://www.lemonde.fr/en/rss/une.xml
+# Deutsche Welle (English, German public intl broadcaster)
+https://rss.dw.com/rdf/rss-en-all
+# Der Spiegel International (English, German investigative)
+https://www.spiegel.de/international/index.rss
+# EL PAIS (English, Spain — also strong LatAm coverage)
+https://feeds.elpais.com/mrss-s/pages/ep/site/english.elpais.com/portada
+# ANSA (Italian wire service) — translated by Ollama
+https://www.ansa.it/sito/ansait_rss.xml
+# La Repubblica (Italian daily) — translated by Ollama
+https://www.repubblica.it/rss/homepage/rss2.0.xml
+# Politico Europe (English, EU policy and politics)
+https://www.politico.eu/feed/
+# EUobserver (English, independent EU affairs)
+https://euobserver.com/rss
+# Euronews (English, pan-European)
+https://www.euronews.com/rss
+
+# === Eastern Europe & Russia ===
+# The Moscow Times (English, independent Russian perspective)
+https://www.themoscowtimes.com/rss/news
+# TASS (English, Russian state perspective)
+https://tass.com/rss/v2.xml
+# Ukrinform (English, Ukrainian state news agency)
+https://www.ukrinform.net/rss/block-lastnews
+# Notes from Poland (English, independent Polish coverage)
+https://notesfrompoland.com/feed/
+# Balkan Insight / BIRN (English, SE Europe investigative)
+https://balkaninsight.com/feed/
+# YLE News (English, Finnish public broadcaster — Nordic/Russia coverage)
+https://feeds.yle.fi/uutiset/v1/recent.rss?publisherIds=YLE_NEWS&language=en
+
 # === East Asia ===
 # NHK (Japanese) — translated by Ollama
 https://www3.nhk.or.jp/rss/news/cat6.xml
@@ -23,6 +61,36 @@ https://www.taipeitimes.com/xml/index.rss
 https://www.hindustantimes.com/feeds/rss/world-news/rssfeed.xml
 # South China Morning Post (English, HK perspective)
 https://www.scmp.com/rss/91/feed
+
+# === Latin America ===
+# Buenos Aires Times (English, Argentina)
+https://www.batimes.com.ar/feed
+# Caracas Chronicles (English, independent Venezuela analysis)
+https://www.caracaschronicles.com/feed/
+# Agencia Brasil (English, Brazilian state news agency)
+https://agenciabrasil.ebc.com.br/en/rss/ultimasnoticias/feed.xml
+# Latin America Reports (English, regional aggregator)
+https://www.latinamericareports.com/feed/
+# BBC Mundo (Spanish, BBC LatAm service) — translated by Ollama
+https://feeds.bbci.co.uk/mundo/rss.xml
+# La Nacion — politics (Spanish, Argentina) — translated by Ollama
+https://www.lanacion.com.ar/arc/outboundfeeds/rss/category/politica/?outputType=xml
+# La Nacion — world (Spanish, Argentina) — translated by Ollama
+https://www.lanacion.com.ar/arc/outboundfeeds/rss/category/el-mundo/?outputType=xml
+# Infobae — politics (Spanish, Argentina) — translated by Ollama
+https://www.infobae.com/arc/outboundfeeds/rss/category/politica/?outputType=xml
+# Infobae — Americas (Spanish, pan-LatAm) — translated by Ollama
+https://www.infobae.com/arc/outboundfeeds/rss/category/america/?outputType=xml
+# El Tiempo (Spanish, Colombia) — translated by Ollama
+https://www.eltiempo.com/rss/colombia.xml
+# El Universal — nation (Spanish, Mexico) — translated by Ollama
+https://www.eluniversal.com.mx/arc/outboundfeeds/rss/category/nacion/?outputType=xml
+# La Tercera (Spanish, Chile) — translated by Ollama
+https://www.latercera.com/arc/outboundfeeds/rss/?outputType=xml
+# Efecto Cocuyo (Spanish, Venezuela independent) — translated by Ollama
+https://efectococuyo.com/feed/
+# Agencia Brasil (Portuguese, Brazilian state news agency) — translated by Ollama
+https://agenciabrasil.ebc.com.br/rss/ultimasnoticias/feed.xml
 
 # === Semiconductors & Memory ===
 # DigiTimes Asia (English, Taiwan supply chain)

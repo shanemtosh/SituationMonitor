@@ -27,7 +27,17 @@ type LoopConfig struct {
 // nonEnglishFeeds lists feed URL substrings for feeds that publish in non-English.
 // Everything else is assumed English and skipped by the translator.
 var nonEnglishFeeds = []string{
-	"www3.nhk.or.jp", // Japanese
+	"www3.nhk.or.jp",      // Japanese
+	"www.ansa.it",         // Italian
+	"www.repubblica.it",   // Italian
+	"feeds.bbci.co.uk/mundo", // Spanish (BBC Mundo)
+	"www.lanacion.com.ar", // Spanish (Argentina)
+	"www.infobae.com",     // Spanish (Argentina/LatAm)
+	"www.eltiempo.com",    // Spanish (Colombia)
+	"www.eluniversal.com.mx", // Spanish (Mexico)
+	"www.latercera.com",   // Spanish (Chile)
+	"efectococuyo.com",    // Spanish (Venezuela)
+	"agenciabrasil.ebc.com.br/rss", // Portuguese (Brazil) — not the /en/ version
 }
 
 func isEnglishFeed(feedURL string) bool {
