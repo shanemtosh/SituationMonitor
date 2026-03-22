@@ -309,6 +309,7 @@ func parseItemFilter(r *http.Request) store.ItemFilter {
 	q := r.URL.Query()
 	f := store.ItemFilter{
 		SourceKind: strings.TrimSpace(q.Get("source")),
+		Region:     strings.TrimSpace(q.Get("region")),
 	}
 	if v := q.Get("min_u"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 0 && n <= 5 {

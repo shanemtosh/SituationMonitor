@@ -14,12 +14,14 @@ import (
 
 	"situationmonitor/internal/config"
 	"situationmonitor/internal/db"
+	"situationmonitor/internal/feeds"
 	"situationmonitor/internal/httpserver"
 	"situationmonitor/internal/ingest/rss"
 	"situationmonitor/internal/ingest/sweep"
 	"situationmonitor/internal/market"
 	"situationmonitor/internal/ollama"
 	"situationmonitor/internal/extract"
+	"situationmonitor/internal/store"
 	"situationmonitor/internal/translate"
 )
 
@@ -146,6 +148,20 @@ func main() {
 			FetchTimeout: cfg.MarketFetchTO,
 			OnStart:      cfg.MarketOnStart,
 		})
+	}
+
+	// Build feed→region map for region-based filtering.
+	if feedList, err := feeds.LoadFeeds(cfg.RSSFeedsFile); err != nil {
+		log.Printf("feeds: %v — region filtering disabled", err)
+	} else {
+		m := make(map[string]string, len(feedList))
+		for _, f := range feedList {
+			if f.Region != "" {
+				m[f.URL] = f.Region
+			}
+		}
+		store.FeedRegionMap = m
+		log.Printf("feeds: loaded %d region mappings", len(m))
 	}
 
 	pagesDir := cfg.PagesDir

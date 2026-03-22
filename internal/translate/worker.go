@@ -99,6 +99,12 @@ func RunLoop(ctx context.Context, db *sql.DB, cfg LoopConfig) {
 				log.Printf("translate: item %d (%d/%d): %v", r.ID, i+1, len(rows), err)
 				continue
 			}
+			// Pass-through detection: if the model returned the source text
+			// unchanged, it likely failed to translate — skip so it gets retried.
+			if strings.EqualFold(strings.TrimSpace(tit), strings.TrimSpace(r.Title)) {
+				log.Printf("translate: item %d (%d/%d): pass-through detected, skipping (title unchanged)", r.ID, i+1, len(rows))
+				continue
+			}
 			log.Printf("translate: item %d (%d/%d): %s → %s", r.ID, i+1, len(rows), lang, truncate(tit, 60))
 			if tit == "" {
 				tit = r.Title

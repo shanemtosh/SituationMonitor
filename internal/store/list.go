@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 // ListedItem is a row for the dashboard / API.
@@ -29,7 +30,11 @@ type ItemFilter struct {
 	MinUrgency int    // 0 = no minimum
 	Hours      int    // 0 = no time cutoff (max 60 days enforced)
 	Limit      int
+	Region     string // empty = all; filters by feed_url using FeedRegionMap
 }
+
+// FeedRegionMap maps feed URL → region tag. Populated at startup from feeds.txt.
+var FeedRegionMap map[string]string
 
 // ListItems returns items newest-first.
 func ListItems(ctx context.Context, db *sql.DB, f ItemFilter) ([]ListedItem, error) {
@@ -57,6 +62,25 @@ func ListItems(ctx context.Context, db *sql.DB, f ItemFilter) ([]ListedItem, err
 		}
 		where += " AND datetime(created_at) >= datetime('now', ?)"
 		args = append(args, fmt.Sprintf("-%d hours", h))
+	}
+	if f.Region != "" && FeedRegionMap != nil {
+		var urls []string
+		for u, r := range FeedRegionMap {
+			if r == f.Region {
+				urls = append(urls, u)
+			}
+		}
+		if len(urls) > 0 {
+			placeholders := make([]string, len(urls))
+			for i, u := range urls {
+				placeholders[i] = "?"
+				args = append(args, u)
+			}
+			where += " AND feed_url IN (" + strings.Join(placeholders, ",") + ")"
+		} else {
+			// Region specified but no feeds match — return nothing
+			where += " AND 0"
+		}
 	}
 
 	q := fmt.Sprintf(`
