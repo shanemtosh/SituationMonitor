@@ -184,6 +184,8 @@ CREATE INDEX IF NOT EXISTS idx_situation_items_item ON situation_items(item_id);
 		{"items", "entities_extracted_at", "TEXT"},
 		{"entities", "canonical_id", "INTEGER REFERENCES entities(id)"},
 		{"situations", "parent_id", "INTEGER REFERENCES situations(id)"},
+		{"items", "brief_text", "TEXT"},
+		{"items", "brief_at", "TEXT"},
 	} {
 		if err := tryAddColumn(ctx, d, step.table, step.col, step.decl); err != nil {
 			return err

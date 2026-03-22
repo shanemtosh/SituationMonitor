@@ -83,6 +83,18 @@
 			border-top: 1px solid var(--border);
 		}
 
+		.brief-section { margin-bottom: 1.5rem; }
+		.brief-section h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); margin-bottom: 0.5rem; }
+		.brief-btn {
+			background: var(--link); color: #fff; border: none; padding: 0.5rem 1rem;
+			border-radius: 4px; cursor: pointer; font-size: 0.85rem;
+		}
+		.brief-btn:hover { opacity: 0.85; }
+		.brief-btn:disabled { opacity: 0.5; cursor: wait; }
+		.brief-content { font-size: 0.9rem; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; }
+		.content-notice { font-size: 0.9rem; color: var(--dim); padding: 1rem 0; font-style: italic; }
+		.content-notice a { color: var(--link); }
+
 		footer { font-size: 0.78rem; color: var(--dim); margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); }
 
 		@media (prefers-color-scheme: dark) {
@@ -113,6 +125,18 @@
 	<div class="summary">{{.DisplaySummary}}</div>
 	{{end}}
 
+	{{if .BriefText}}
+	<div class="brief-section">
+		<h3>AI Brief</h3>
+		<div class="brief-content">{{.BriefText}}</div>
+	</div>
+	{{else if .ItemID}}
+	<div class="brief-section">
+		<button id="brief-btn" class="brief-btn" onclick="briefMe({{.ItemID}})">Brief me on this</button>
+		<div id="brief-result" class="brief-content" style="display:none"></div>
+	</div>
+	{{end}}
+
 	{{if .Error}}
 	<p class="error-msg">{{.Error}}</p>
 	{{else if .Content}}
@@ -120,6 +144,8 @@
 	{{if .WasTranslated}}
 	<p class="translate-notice">Translated from {{.Lang}} by {{.TranslatorModel}}</p>
 	{{end}}
+	{{else if not .IsInternal}}
+	<p class="content-notice">Full article content available on internal network. <a href="{{.URL}}" rel="noopener">View original source</a>.</p>
 	{{else}}
 	<p class="loading">Fetching article content…</p>
 	{{end}}
@@ -129,6 +155,23 @@
 	</footer>
 
 	<script>
+	function briefMe(id) {
+		var btn = document.getElementById('brief-btn');
+		var result = document.getElementById('brief-result');
+		btn.disabled = true;
+		btn.textContent = 'Generating brief…';
+		fetch('/api/brief/' + id)
+			.then(function(r) { return r.json(); })
+			.then(function(d) {
+				result.textContent = d.summary || 'No brief available.';
+				result.style.display = 'block';
+				btn.style.display = 'none';
+			})
+			.catch(function(e) {
+				btn.textContent = 'Brief failed — try again';
+				btn.disabled = false;
+			});
+	}
 	(function(){
 		var SUN='<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
 		var MOON='<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>';

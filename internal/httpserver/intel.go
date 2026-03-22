@@ -14,6 +14,19 @@ import (
 	"situationmonitor/internal/store"
 )
 
+type entityJSON struct {
+	Name      string `json:"name"`
+	Kind      string `json:"kind"`
+	ItemCount int    `json:"item_count"`
+}
+
+type situationJSON struct {
+	Name      string `json:"name"`
+	Slug      string `json:"slug"`
+	Status    string `json:"status"`
+	ItemCount int    `json:"item_count"`
+}
+
 type sitOutJSON struct {
 	ID          int64        `json:"id"`
 	Name        string       `json:"name"`
@@ -52,6 +65,36 @@ func handleBriefItem(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
 		item, err := store.GetReaderItem(ctx, db, id)
 		if err != nil {
 			http.NotFound(w, r)
+			return
+		}
+
+		// Return cached brief if available
+		if item.BriefText != "" {
+			entities, _ := store.GetItemEntities(ctx, db, id)
+			situations, _ := store.GetItemSituations(ctx, db, id)
+			entJSON := make([]entityJSON, 0, len(entities))
+			for _, e := range entities {
+				entJSON = append(entJSON, entityJSON{Name: e.Name, Kind: e.Kind, ItemCount: e.ItemCount})
+			}
+			sitJSON := make([]situationJSON, 0, len(situations))
+			for _, s := range situations {
+				sitJSON = append(sitJSON, situationJSON{Name: s.Name, Slug: s.Slug, Status: s.Status, ItemCount: s.ItemCount})
+			}
+			pivotTitle := item.TitleTranslated
+			if pivotTitle == "" {
+				pivotTitle = item.Title
+			}
+			out := map[string]any{
+				"item_id":    id,
+				"title":      pivotTitle,
+				"summary":    item.BriefText,
+				"cached":     true,
+				"cached_at":  item.BriefAt,
+				"entities":   entJSON,
+				"situations": sitJSON,
+			}
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			_ = json.NewEncoder(w).Encode(out)
 			return
 		}
 
@@ -121,16 +164,9 @@ func handleBriefItem(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
 			synthesis = "Ollama not configured for synthesis."
 		}
 
-		type entityJSON struct {
-			Name      string `json:"name"`
-			Kind      string `json:"kind"`
-			ItemCount int    `json:"item_count"`
-		}
-		type situationJSON struct {
-			Name      string `json:"name"`
-			Slug      string `json:"slug"`
-			Status    string `json:"status"`
-			ItemCount int    `json:"item_count"`
+		// Cache the result
+		if synthesis != "" && !strings.HasPrefix(synthesis, "(synthesis unavailable") {
+			_ = store.SetBrief(ctx, db, id, synthesis)
 		}
 
 		entJSON := make([]entityJSON, 0, len(entities))

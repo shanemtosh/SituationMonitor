@@ -443,17 +443,20 @@ var readerHTML string
 var readerTmpl = template.Must(template.New("reader").Parse(readerHTML))
 
 type readerData struct {
-	DisplayTitle   string
-	DisplaySummary string
-	URL            string
-	SourceKind     string
-	FeedName       string
-	Lang           string
-	CreatedAt      string
-	Content        string
-	Error          string
-	WasTranslated  bool
+	DisplayTitle    string
+	DisplaySummary  string
+	URL             string
+	SourceKind      string
+	FeedName        string
+	Lang            string
+	CreatedAt       string
+	Content         string
+	Error           string
+	WasTranslated   bool
 	TranslatorModel string
+	ItemID          int64
+	BriefText       string
+	IsInternal      bool // true when accessed via Tailscale/localhost
 }
 
 func handleReader(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
@@ -472,6 +475,8 @@ func handleReader(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
 			return
 		}
 
+		internal := isInternalRequest(r)
+
 		data := readerData{
 			DisplayTitle: item.Title,
 			URL:          item.URL,
@@ -479,6 +484,9 @@ func handleReader(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
 			FeedName:     feedName(item.FeedURL),
 			Lang:         item.Lang,
 			CreatedAt:    item.CreatedAt,
+			ItemID:       id,
+			BriefText:    item.BriefText,
+			IsInternal:   internal,
 		}
 		if item.TitleTranslated != "" {
 			data.DisplayTitle = item.TitleTranslated
@@ -487,6 +495,14 @@ func handleReader(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
 			data.DisplaySummary = item.SummaryTranslated
 		} else if item.Summary != "" {
 			data.DisplaySummary = item.Summary
+		}
+
+		// Full content: only serve to internal requests
+		if !internal {
+			// Public access: show summary only, no full article
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_ = readerTmpl.Execute(w, data)
+			return
 		}
 
 		// Serve cached content if available
@@ -554,3 +570,22 @@ func handleReader(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
 	}
 }
 
+// isInternalRequest returns true if the request comes from localhost, Tailscale,
+// or has the X-Internal header set by nginx for trusted origins.
+func isInternalRequest(r *http.Request) bool {
+	// Check X-Internal header (set by nginx for Tailscale-origin requests)
+	if r.Header.Get("X-Internal") == "true" {
+		return true
+	}
+	// Check if direct localhost access
+	host := r.Host
+	if strings.HasPrefix(host, "127.0.0.1") || strings.HasPrefix(host, "localhost") || strings.HasPrefix(host, "[::1]") {
+		return true
+	}
+	// Check RemoteAddr for local connections
+	remote := r.RemoteAddr
+	if strings.HasPrefix(remote, "127.0.0.1") || strings.HasPrefix(remote, "[::1]") || strings.HasPrefix(remote, "100.") {
+		return true // 100.x.y.z = Tailscale
+	}
+	return false
+}
