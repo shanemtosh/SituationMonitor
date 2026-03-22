@@ -68,7 +68,7 @@ func (c *Client) ChatCompletion(ctx context.Context, req ChatRequest) (string, e
 	}
 	r.Header.Set("Authorization", "Bearer "+c.APIKey)
 	r.Header.Set("Content-Type", "application/json")
-	r.Header.Set("HTTP-Referer", "https://local/situationmonitor")
+	r.Header.Set("HTTP-Referer", "https://situation.mto.sh")
 	r.Header.Set("X-Title", "Situation Monitor")
 
 	resp, err := c.HTTPClient.Do(r)
