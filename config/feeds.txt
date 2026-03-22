@@ -121,3 +121,5 @@ gov|https://www.whitehouse.gov/presidential-actions/feed/
 gov|https://www.census.gov/economic-indicators/indicator.xml
 # BEA — GDP, trade balance, personal income releases
 gov|https://apps.bea.gov/rss/rss.xml
+# Treasury — press releases (scraped, sanctions/fiscal/debt policy)
+gov|treasury://home.treasury.gov/news/press-releases

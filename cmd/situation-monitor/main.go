@@ -18,6 +18,7 @@ import (
 	"situationmonitor/internal/httpserver"
 	"situationmonitor/internal/ingest/rss"
 	"situationmonitor/internal/ingest/sweep"
+	"situationmonitor/internal/ingest/treasury"
 	"situationmonitor/internal/market"
 	"situationmonitor/internal/ollama"
 	"situationmonitor/internal/extract"
@@ -139,6 +140,14 @@ func main() {
 			MinClusterOverlap: 2,
 			SituationMinItems: cfg.SituationMinItems,
 		})
+	}
+
+	if cfg.TreasuryPoll > 0 {
+		go treasury.RunLoop(ctx, treasury.Config{
+			PollInterval:  cfg.TreasuryPoll,
+			FetchTimeout:  45 * time.Second,
+			IngestOnStart: cfg.TreasuryOnStart,
+		}, sqlDB)
 	}
 
 	if cfg.MarketPoll > 0 && len(cfg.MarketSymbols) > 0 {

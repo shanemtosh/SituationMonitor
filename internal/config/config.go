@@ -57,6 +57,9 @@ type Config struct {
 	MarketOnStart   bool
 
 	PaywallFetcherURL string
+
+	TreasuryPoll    time.Duration
+	TreasuryOnStart bool
 }
 
 // Load reads configuration from the environment.
@@ -118,6 +121,9 @@ func Load() (Config, error) {
 		MarketOnStart: ParseBool("MARKET_ON_START", true),
 
 		PaywallFetcherURL: strings.TrimRight(strings.TrimSpace(os.Getenv("PAYWALL_FETCHER_URL")), "/"),
+
+		TreasuryPoll:    durSec("TREASURY_POLL_SEC", 3600),
+		TreasuryOnStart: ParseBool("TREASURY_ON_START", true),
 	}
 
 	if c.RSSFetchTimeout <= 0 {
