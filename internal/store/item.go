@@ -24,6 +24,29 @@ type RSSArticle struct {
 	TranslatorModel string
 }
 
+// ItemNeedsTranslation checks if an item is new or needs a translation retry.
+// Returns false (skip translation) if the item exists with a translation, or if it's
+// older than 24h without translation (permanently failed — don't keep retrying).
+func ItemNeedsTranslation(ctx context.Context, db *sql.DB, externalID string) bool {
+	var lang sql.NullString
+	var createdAt string
+	err := db.QueryRowContext(ctx,
+		"SELECT COALESCE(lang,''), created_at FROM items WHERE source_kind = ? AND external_id = ? LIMIT 1",
+		SourceRSS, externalID).Scan(&lang, &createdAt)
+	if err != nil {
+		return true // item doesn't exist — new item, needs translation
+	}
+	if lang.String != "" {
+		return false // already translated (or marked as failed)
+	}
+	// Item exists but no translation — retry only if recent (< 24h)
+	t, err := time.Parse(time.RFC3339, createdAt)
+	if err != nil {
+		return true
+	}
+	return time.Since(t) < 24*time.Hour
+}
+
 // ItemExists checks if an item with the given external_id already exists.
 func ItemExists(ctx context.Context, db *sql.DB, externalID string) bool {
 	var n int

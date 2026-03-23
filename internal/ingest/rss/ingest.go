@@ -104,24 +104,61 @@ func isNonEnglish(feedURL string) bool {
 	return false
 }
 
-// IngestAll fetches each feed URL and upserts items. Returns total successful upserts and the last error, if any.
+// IngestAll fetches all feeds and upserts items. English feeds run concurrently,
+// non-English feeds run sequentially (to avoid overwhelming Ollama with translation).
 func IngestAll(ctx context.Context, db *sql.DB, client *http.Client, parser *gofeed.Parser, feedURLs []string, cfg Config) (int, error) {
-	var total int
-	var lastErr error
+	var englishFeeds, translateFeeds []string
 	for _, u := range feedURLs {
 		u = strings.TrimSpace(u)
-		// Skip non-HTTP feeds (e.g. treasury:// handled by dedicated scrapers)
 		if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
 			continue
 		}
+		if isNonEnglish(u) {
+			translateFeeds = append(translateFeeds, u)
+		} else {
+			englishFeeds = append(englishFeeds, u)
+		}
+	}
+
+	var total int64
+	var lastErr error
+
+	// English feeds: fetch concurrently (no Ollama calls needed)
+	type result struct {
+		n   int
+		err error
+		url string
+	}
+	ch := make(chan result, len(englishFeeds))
+	sem := make(chan struct{}, 10) // limit to 10 concurrent fetches
+	for _, u := range englishFeeds {
+		go func(feedURL string) {
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			n, err := ingestOne(ctx, db, client, parser, feedURL, cfg)
+			ch <- result{n, err, feedURL}
+		}(u)
+	}
+	for range englishFeeds {
+		r := <-ch
+		total += int64(r.n)
+		if r.err != nil {
+			lastErr = r.err
+			log.Printf("rss: feed %q: %v", r.url, r.err)
+		}
+	}
+
+	// Non-English feeds: sequential (Ollama calls are serialized on GPU anyway)
+	for _, u := range translateFeeds {
 		n, err := ingestOne(ctx, db, client, parser, u, cfg)
-		total += n
+		total += int64(n)
 		if err != nil {
 			lastErr = err
 			log.Printf("rss: feed %q: %v", u, err)
 		}
 	}
-	return total, lastErr
+
+	return int(total), lastErr
 }
 
 func ingestOne(ctx context.Context, db *sql.DB, client *http.Client, parser *gofeed.Parser, feedURL string, cfg Config) (int, error) {
@@ -180,12 +217,14 @@ func ingestOne(ctx context.Context, db *sql.DB, client *http.Client, parser *gof
 			Published:  pub,
 		}
 
-		// Inline translation for non-English feeds — only for new items
-		if needsTranslation && cfg.OllamaModel != "" && !store.ItemExists(ctxUpsert, db, a.ExternalID) {
+		// Inline translation for non-English feeds — translate if new or missing translation
+		if needsTranslation && cfg.OllamaModel != "" && store.ItemNeedsTranslation(ctxUpsert, db, a.ExternalID) {
 			lang, tit, sum, err := ollama.TranslateToTarget(ctxUpsert, cfg.OllamaBaseURL, cfg.OllamaModel, target, a.Title, a.Summary)
 			if err != nil {
 				log.Printf("rss: translate %q: %v", truncate(a.Title, 40), err)
-				// Still ingest without translation — will appear untranslated
+				// Mark as failed so we don't retry on every poll cycle
+				a.Lang = "fail"
+				a.TranslatorModel = "error"
 			} else if strings.EqualFold(strings.TrimSpace(tit), strings.TrimSpace(a.Title)) {
 				log.Printf("rss: translate pass-through: %q", truncate(a.Title, 40))
 				// Pass-through detected — don't store bad translation
@@ -212,12 +251,58 @@ func ingestOne(ctx context.Context, db *sql.DB, client *http.Client, parser *gof
 			a.TranslatorModel = "skip"
 		}
 
+		// Drop items that look like lifestyle/promo content based on translated title
+		if a.TitleTranslated != "" && isLowQualityItem(a.TitleTranslated) {
+			continue
+		}
+
 		if err := store.UpsertRSS(ctxUpsert, db, a); err != nil {
 			return n, err
 		}
 		n++
 	}
 	return n, nil
+}
+
+// lowQualityPatterns match translated titles that are lifestyle/promo/entertainment,
+// not hard news. Case-insensitive matching.
+var lowQualityPatterns = []string{
+	"children's day",
+	"free admission",
+	"luxury jewelry",
+	"amusement park",
+	"theme park",
+	"wins design award",
+	"wins if design",
+	"wins red dot",
+	"recipe for",
+	"horoscope",
+	"zodiac",
+	"washing machine",
+	"air conditioner",
+	"hair dryer",
+	"skincare",
+	"beauty tips",
+	"fashion collection",
+	"debuts in taiwan",
+	"special offers revealed",
+	"family fun",
+	"travel deal",
+	"hotel promotion",
+	"restaurant review",
+	"food festival",
+	"celebrity wedding",
+	"reality show",
+}
+
+func isLowQualityItem(translatedTitle string) bool {
+	lower := strings.ToLower(translatedTitle)
+	for _, p := range lowQualityPatterns {
+		if strings.Contains(lower, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func truncate(s string, n int) string {
