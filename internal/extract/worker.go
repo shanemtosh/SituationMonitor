@@ -99,11 +99,20 @@ func pass1NER(ctx context.Context, db *sql.DB, baseURL, model string, batch int)
 		title := r.Title
 		summary := r.Summary
 
-		entities, err := ollama.ExtractEntities(ctx, baseURL, model, title, summary)
+		entities, relevance, err := ollama.ExtractEntities(ctx, baseURL, model, title, summary)
 		if err != nil {
 			log.Printf("extract: item %d (%d/%d): %v", r.ID, i+1, len(rows), err)
 			// Mark extracted anyway to avoid infinite retry
 			_ = store.MarkExtracted(ctx, db, r.ID)
+			continue
+		}
+
+		// Low-relevance items: set urgency to 0 so they're hidden from default feed
+		if relevance == "low" {
+			log.Printf("extract: item %d (%d/%d): low relevance, hiding", r.ID, i+1, len(rows))
+			_ = store.SetUrgency(ctx, db, r.ID, 0)
+			_ = store.MarkExtracted(ctx, db, r.ID)
+			processed = append(processed, r.ID)
 			continue
 		}
 

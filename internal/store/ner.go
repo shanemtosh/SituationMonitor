@@ -37,6 +37,12 @@ LIMIT ?
 }
 
 // MarkExtracted sets entities_extracted_at for an item.
+// SetUrgency updates an item's urgency score.
+func SetUrgency(ctx context.Context, db *sql.DB, id int64, urgency int) error {
+	_, err := db.ExecContext(ctx, `UPDATE items SET urgency = ? WHERE id = ?`, urgency, id)
+	return err
+}
+
 func MarkExtracted(ctx context.Context, db *sql.DB, id int64) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := db.ExecContext(ctx, `UPDATE items SET entities_extracted_at = ? WHERE id = ?`, now, id)

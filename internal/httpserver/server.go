@@ -206,6 +206,9 @@ func handleDashboard(db *sql.DB) http.HandlerFunc {
 		if r.URL.Query().Get("limit") == "" {
 			f.Limit = 80
 		}
+		if r.URL.Query().Get("min_u") == "" {
+			f.MinUrgency = 1 // hide low-relevance items (urgency=0) by default
+		}
 
 		items, err := store.ListItems(ctx, db, f)
 		if err != nil {

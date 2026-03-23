@@ -17,11 +17,17 @@ type Entity struct {
 	Kind string `json:"kind"` // PERSON, ORG, PLACE, TOPIC
 }
 
-// ExtractEntities calls Ollama to extract named entities from a news item's title and summary.
-func ExtractEntities(ctx context.Context, baseURL, model, title, summary string) ([]Entity, error) {
+// NERResult holds extracted entities and a relevance assessment.
+type NERResult struct {
+	Entities  []Entity `json:"entities"`
+	Relevance string   `json:"relevance"` // "high", "medium", or "low"
+}
+
+// ExtractEntities calls Ollama to extract named entities and assess relevance.
+func ExtractEntities(ctx context.Context, baseURL, model, title, summary string) ([]Entity, string, error) {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" || strings.TrimSpace(model) == "" {
-		return nil, fmt.Errorf("ollama: missing base URL or model")
+		return nil, "", fmt.Errorf("ollama: missing base URL or model")
 	}
 
 	sum := strings.TrimSpace(summary)
@@ -29,15 +35,15 @@ func ExtractEntities(ctx context.Context, baseURL, model, title, summary string)
 		sum = sum[:4000] + "…"
 	}
 
-	user := fmt.Sprintf(`Extract named entities from this news item.
+	user := fmt.Sprintf(`Extract named entities from this news item and assess its relevance.
 
 Title: %s
 Summary: %s
 
-Reply with ONLY a JSON array (max 12 entities):
-[{"name":"...","kind":"PERSON"},{"name":"...","kind":"ORG"},...]
+Reply with ONLY a JSON object:
+{"entities":[{"name":"...","kind":"PERSON"}],"relevance":"high"}
 
-Rules:
+Entity rules:
 - kind must be one of: PERSON ORG PLACE TOPIC
 - PLACE: countries, cities, regions (e.g. Syria, Damascus, Middle East, Gaza, Strait of Hormuz)
 - PERSON: named individuals (e.g. Donald Trump, Xi Jinping)
@@ -46,7 +52,13 @@ Rules:
 - Always extract country names as PLACE
 - Always extract city names as PLACE
 - Normalize to canonical English form
-- Do NOT include generic terms like "authorities", "residents", "officials"`,
+- Do NOT include generic terms like "authorities", "residents", "officials"
+- Max 12 entities
+
+Relevance rules:
+- "high": geopolitics, conflict, government policy, elections, economics, trade, sanctions, defense, energy, semiconductors, major corporate deals
+- "medium": domestic politics, business earnings, industry trends, scientific research
+- "low": celebrity news, lifestyle, entertainment, sports, product launches, restaurant reviews, travel deals, horoscopes, promotional content, theme parks, fashion, consumer products`,
 		strings.TrimSpace(title), sum)
 
 	body, err := json.Marshal(map[string]any{
@@ -62,27 +74,27 @@ Rules:
 		},
 	})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	client := &http.Client{Timeout: 3 * time.Minute}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/chat", bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("ollama HTTP %s: %s", resp.Status, string(raw))
+		return nil, "", fmt.Errorf("ollama HTTP %s: %s", resp.Status, string(raw))
 	}
 
 	var parsed struct {
@@ -91,26 +103,47 @@ Rules:
 		} `json:"message"`
 	}
 	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return nil, fmt.Errorf("ollama decode: %w", err)
+		return nil, "", fmt.Errorf("ollama decode: %w", err)
 	}
 	content := strings.TrimSpace(parsed.Message.Content)
 
 	// Strip markdown fences
 	content = stripFences(content)
 
-	// Parse JSON array
+	// Try parsing as NERResult object first (new format)
+	var result NERResult
 	var entities []Entity
-	if err := json.Unmarshal([]byte(content), &entities); err != nil {
-		// Try extracting array from surrounding text
-		if start := strings.IndexByte(content, '['); start >= 0 {
-			if end := strings.LastIndexByte(content, ']'); end > start {
-				if err2 := json.Unmarshal([]byte(content[start:end+1]), &entities); err2 != nil {
-					return nil, nil // skip silently, will retry
+	relevance := "medium" // default
+
+	if err := json.Unmarshal([]byte(content), &result); err == nil && len(result.Entities) > 0 {
+		entities = result.Entities
+		if result.Relevance != "" {
+			relevance = strings.ToLower(result.Relevance)
+		}
+	} else {
+		// Fall back to parsing as bare JSON array (old format / model quirks)
+		if err := json.Unmarshal([]byte(content), &entities); err != nil {
+			if start := strings.IndexByte(content, '['); start >= 0 {
+				if end := strings.LastIndexByte(content, ']'); end > start {
+					_ = json.Unmarshal([]byte(content[start:end+1]), &entities)
+				}
+			}
+			// Try extracting object from surrounding text
+			if entities == nil {
+				if start := strings.IndexByte(content, '{'); start >= 0 {
+					if end := strings.LastIndexByte(content, '}'); end > start {
+						if err2 := json.Unmarshal([]byte(content[start:end+1]), &result); err2 == nil {
+							entities = result.Entities
+							if result.Relevance != "" {
+								relevance = strings.ToLower(result.Relevance)
+							}
+						}
+					}
 				}
 			}
 		}
 		if entities == nil {
-			return nil, nil
+			return nil, relevance, nil
 		}
 	}
 
@@ -130,7 +163,7 @@ Rules:
 			valid = append(valid, e)
 		}
 	}
-	return valid, nil
+	return valid, relevance, nil
 }
 
 func stripFences(s string) string {
