@@ -114,10 +114,6 @@ latam|https://efectococuyo.com/feed/
 # Agencia Brasil (Portuguese, Brazilian state news agency) — translated by Ollama
 latam|https://agenciabrasil.ebc.com.br/rss/ultimasnoticias/feed.xml
 
-# === Taiwan Finance ===
-# UDN Economic Daily News (Traditional Chinese, Taiwan finance/semis) — translated by Ollama
-asia|https://money.udn.com/rssfeed/news/1001
-
 # === Semiconductors & Memory ===
 # DigiTimes Asia (English, Taiwan supply chain)
 tech|https://www.digitimes.com/rss/daily.xml

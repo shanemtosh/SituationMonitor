@@ -91,7 +91,6 @@ var nonEnglishFeeds = []string{
 	"www.latercera.com",           // Spanish (Chile)
 	"efectococuyo.com",            // Spanish (Venezuela)
 	"agenciabrasil.ebc.com.br/rss", // Portuguese (Brazil)
-	"money.udn.com",              // Traditional Chinese (Taiwan)
 }
 
 func isNonEnglish(feedURL string) bool {

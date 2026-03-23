@@ -300,7 +300,6 @@ var knownFeeds = map[string]string{
 	"scmp.com":              "SCMP",
 	"chinadaily.com.cn":     "China Daily",
 	"taipeitimes.com":       "Taipei Times",
-	"money.udn.com":         "UDN Economic Daily",
 	// Latin America
 	"batimes.com.ar":        "BA Times",
 	"caracaschronicles.com": "Caracas Chronicles",
