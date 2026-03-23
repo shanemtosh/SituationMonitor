@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -93,6 +94,7 @@ func fetchDirect(ctx context.Context, rawURL string) (Article, error) {
 		text = strings.TrimSpace(article.Content)
 	}
 	text = htmltext.Strip(text)
+	text = stripNavJunk(text)
 	if len(text) > 30000 {
 		text = text[:30000] + "\n\n[Article truncated]"
 	}
@@ -149,6 +151,119 @@ func fetchViaPlaywright(ctx context.Context, rawURL, fetcherURL string) (Article
 		Title:   result.Title,
 		Content: text,
 	}, nil
+}
+
+// navJunkPatterns are substrings that indicate navigation/menu content
+// was picked up by the readability parser.
+var navJunkPatterns = []string{
+	"WorldChinaJapan",
+	"SemiconductorsAutomobiles",
+	"EquitiesCurrenciesBonds",
+	"PoliticsPolitics",
+	"EconomyEconomy",
+	"BusinessBusiness",
+	"TechTech",
+	"Life & ArtsLife & Arts",
+	"Watch & Listen",
+}
+
+// stripNavJunk removes navigation menu text that readability sometimes picks up.
+// Works on both multi-line nav lists and single-line concatenated nav text.
+func stripNavJunk(text string) string {
+	// Check for concatenated nav junk (single-line nav menus like "WorldChinaJapanIndia...")
+	for _, p := range navJunkPatterns {
+		if idx := strings.Index(text, p); idx >= 0 && idx < 200 {
+			// Nav junk at the start — find where real content begins.
+			// Look for common article dateline patterns or long sentences with periods.
+			cleaned := stripToArticleBody(text)
+			if cleaned != "" {
+				return cleaned
+			}
+		}
+	}
+
+	// Multi-line nav stripping: detect long runs of short lines
+	lines := strings.Split(text, "\n")
+	if len(lines) < 5 {
+		return text
+	}
+
+	articleStart := 0
+	consecutiveShort := 0
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		if len(line) < 40 && !strings.Contains(line, ".") && line != "" {
+			consecutiveShort++
+		} else if len(line) >= 60 {
+			if consecutiveShort >= 8 {
+				articleStart = i
+			}
+			consecutiveShort = 0
+		} else {
+			consecutiveShort = 0
+		}
+	}
+
+	// Strip trailing nav/promo junk
+	articleEnd := len(lines)
+	trailingShort := 0
+	for i := len(lines) - 1; i > articleStart; i-- {
+		line := strings.TrimSpace(lines[i])
+		if len(line) < 40 && line != "" {
+			trailingShort++
+		} else if len(line) >= 60 {
+			if trailingShort >= 5 {
+				articleEnd = i + 1
+			}
+			break
+		}
+	}
+
+	if articleStart > 0 || articleEnd < len(lines) {
+		return strings.TrimSpace(strings.Join(lines[articleStart:articleEnd], "\n"))
+	}
+	return text
+}
+
+// trailingJunkMarkers indicate where article content ends and promo/nav begins.
+var trailingJunkMarkers = []string{
+	"Read Next",
+	"Latest on ",
+	"Sponsored Content",
+	"About Sponsored Content",
+	"This content was commissioned",
+	"Sign up to our newsletters",
+	"Subscribe to our newsletter",
+	"Related Articles",
+	"More from ",
+	"Share this article",
+}
+
+// stripToArticleBody finds the actual article content after nav junk.
+// Looks for dateline patterns (CITY --) or the first long sentence with a period.
+func stripToArticleBody(text string) string {
+	// Try dateline pattern: "TOKYO -- ", "WASHINGTON -- ", etc.
+	datelineRe := regexp.MustCompile(`[A-Z]{3,}[\s]*--[\s]`)
+	if loc := datelineRe.FindStringIndex(text); loc != nil {
+		text = strings.TrimSpace(text[loc[0]:])
+	} else {
+		// Find first sentence-like content
+		sentenceRe := regexp.MustCompile(`[A-Z][a-z]{2,}[^.]{20,}\.\s`)
+		if loc := sentenceRe.FindStringIndex(text); loc != nil && loc[0] > 100 {
+			text = strings.TrimSpace(text[loc[0]:])
+		} else {
+			return ""
+		}
+	}
+
+	// Strip trailing promo/nav junk
+	for _, marker := range trailingJunkMarkers {
+		if idx := strings.Index(text, marker); idx > 0 {
+			text = strings.TrimSpace(text[:idx])
+		}
+	}
+
+	return text
 }
 
 // fetchViaBypass tries free archive/cache services to get paywalled content.
