@@ -75,11 +75,14 @@ func main() {
 
 	if cfg.RSSPollInterval > 0 {
 		go rss.RunLoop(ctx, rss.Config{
-			FeedsFile:     cfg.RSSFeedsFile,
-			PollInterval:  cfg.RSSPollInterval,
-			FetchTimeout:  cfg.RSSFetchTimeout,
-			UserAgent:     cfg.RSSUserAgent,
-			IngestOnStart: cfg.RSSIngestOnStart,
+			FeedsFile:       cfg.RSSFeedsFile,
+			PollInterval:    cfg.RSSPollInterval,
+			FetchTimeout:    cfg.RSSFetchTimeout,
+			UserAgent:       cfg.RSSUserAgent,
+			IngestOnStart:   cfg.RSSIngestOnStart,
+			OllamaBaseURL:   cfg.OllamaBaseURL,
+			OllamaModel:     cfg.OllamaTranslate,
+			TranslateTarget: cfg.TranslateTarget,
 		}, sqlDB)
 	}
 

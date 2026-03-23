@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"situationmonitor/internal/ollama"
 	"situationmonitor/internal/reader"
 	"situationmonitor/internal/store"
 )
@@ -24,33 +23,6 @@ type LoopConfig struct {
 	ContentBatchSize  int // max articles to fetch+translate per tick (default 3)
 }
 
-// nonEnglishFeeds lists feed URL substrings for feeds that publish in non-English.
-// Everything else is assumed English and skipped by the translator.
-var nonEnglishFeeds = []string{
-	"www3.nhk.or.jp",      // Japanese
-	"www.ansa.it",         // Italian
-	"www.repubblica.it",   // Italian
-	"feeds.bbci.co.uk/mundo", // Spanish (BBC Mundo)
-	"www.lanacion.com.ar", // Spanish (Argentina)
-	"www.infobae.com",     // Spanish (Argentina/LatAm)
-	"www.eltiempo.com",    // Spanish (Colombia)
-	"www.eluniversal.com.mx", // Spanish (Mexico)
-	"www.latercera.com",   // Spanish (Chile)
-	"efectococuyo.com",    // Spanish (Venezuela)
-	"agenciabrasil.ebc.com.br/rss", // Portuguese (Brazil) — not the /en/ version
-	"money.udn.com",               // Traditional Chinese (Taiwan)
-}
-
-func isEnglishFeed(feedURL string) bool {
-	lower := strings.ToLower(feedURL)
-	for _, f := range nonEnglishFeeds {
-		if strings.Contains(lower, f) {
-			return false
-		}
-	}
-	return true
-}
-
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
@@ -58,7 +30,8 @@ func truncate(s string, n int) string {
 	return s[:n] + "…"
 }
 
-// RunLoop processes untranslated items until ctx is cancelled.
+// RunLoop fetches and translates full article content for non-English items.
+// Title/summary translation is now handled inline during RSS ingestion.
 func RunLoop(ctx context.Context, db *sql.DB, cfg LoopConfig) {
 	if cfg.PollInterval <= 0 || strings.TrimSpace(cfg.Model) == "" {
 		return
@@ -66,10 +39,6 @@ func RunLoop(ctx context.Context, db *sql.DB, cfg LoopConfig) {
 	target := strings.TrimSpace(cfg.TargetLang)
 	if target == "" {
 		target = "English"
-	}
-	batch := cfg.BatchSize
-	if batch <= 0 {
-		batch = 15
 	}
 
 	contentBatch := cfg.ContentBatchSize
@@ -80,51 +49,6 @@ func RunLoop(ctx context.Context, db *sql.DB, cfg LoopConfig) {
 	run := func() {
 		ctxRun, cancel := context.WithTimeout(ctx, 8*time.Minute)
 		defer cancel()
-
-		// Pass 1: translate titles and summaries
-		rows, err := store.ListUntranslated(ctxRun, db, batch)
-		if err != nil {
-			log.Printf("translate: list: %v", err)
-			return
-		}
-		for i, r := range rows {
-			// Skip known English-language feeds — mark as English directly
-			if isEnglishFeed(r.FeedURL) {
-				if err := store.SetTranslation(ctxRun, db, r.ID, "en", r.Title, r.Summary, "skip"); err != nil {
-					log.Printf("translate: save %d: %v", r.ID, err)
-				}
-				continue
-			}
-			lang, tit, sum, err := ollama.TranslateToTarget(ctxRun, cfg.OllamaBaseURL, cfg.Model, target, r.Title, r.Summary)
-			if err != nil {
-				log.Printf("translate: item %d (%d/%d): %v", r.ID, i+1, len(rows), err)
-				continue
-			}
-			// Pass-through detection: if the model returned the source text
-			// unchanged, it likely failed to translate — skip so it gets retried.
-			if strings.EqualFold(strings.TrimSpace(tit), strings.TrimSpace(r.Title)) {
-				log.Printf("translate: item %d (%d/%d): pass-through detected, skipping (title unchanged)", r.ID, i+1, len(rows))
-				continue
-			}
-			log.Printf("translate: item %d (%d/%d): %s → %s", r.ID, i+1, len(rows), lang, truncate(tit, 60))
-			if tit == "" {
-				tit = r.Title
-			}
-			if sum == "" {
-				sum = r.Summary
-			}
-			if lang == "" {
-				lang = "und"
-			}
-			if err := store.SetTranslation(ctxRun, db, r.ID, lang, tit, sum, cfg.Model); err != nil {
-				log.Printf("translate: save %d: %v", r.ID, err)
-			}
-		}
-		if len(rows) > 0 {
-			log.Printf("translate: processed %d items", len(rows))
-		}
-
-		// Pass 2: fetch and translate full article content for non-English items
 		translateContent(ctxRun, db, cfg, target, contentBatch)
 	}
 

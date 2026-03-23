@@ -16,6 +16,7 @@ import (
 
 	"situationmonitor/internal/feeds"
 	"situationmonitor/internal/htmltext"
+	"situationmonitor/internal/ollama"
 	"situationmonitor/internal/store"
 )
 
@@ -40,7 +41,7 @@ func RunLoop(ctx context.Context, cfg Config, db *sql.DB) {
 			log.Printf("rss: %q contains no URLs", cfg.FeedsFile)
 			return
 		}
-		n, err := IngestAll(ctx, db, client, parser, urls, cfg.UserAgent)
+		n, err := IngestAll(ctx, db, client, parser, urls, cfg)
 		if err != nil {
 			log.Printf("rss: ingest finished with errors after %d upserts: %v", n, err)
 			return
@@ -64,17 +65,47 @@ func RunLoop(ctx context.Context, cfg Config, db *sql.DB) {
 	}
 }
 
-// Config is the subset of app config needed for RSS polling (avoids an import cycle on internal/config).
+// Config is the subset of app config needed for RSS polling.
 type Config struct {
-	FeedsFile      string
-	PollInterval   time.Duration
-	FetchTimeout   time.Duration
-	UserAgent      string
-	IngestOnStart  bool
+	FeedsFile     string
+	PollInterval  time.Duration
+	FetchTimeout  time.Duration
+	UserAgent     string
+	IngestOnStart bool
+	// Inline translation
+	OllamaBaseURL  string
+	OllamaModel    string
+	TranslateTarget string
+}
+
+// nonEnglishFeeds lists feed URL substrings for feeds that publish in non-English.
+var nonEnglishFeeds = []string{
+	"www3.nhk.or.jp",              // Japanese
+	"www.ansa.it",                 // Italian
+	"www.repubblica.it",           // Italian
+	"feeds.bbci.co.uk/mundo",      // Spanish (BBC Mundo)
+	"www.lanacion.com.ar",         // Spanish (Argentina)
+	"www.infobae.com",             // Spanish (Argentina/LatAm)
+	"www.eltiempo.com",            // Spanish (Colombia)
+	"www.eluniversal.com.mx",      // Spanish (Mexico)
+	"www.latercera.com",           // Spanish (Chile)
+	"efectococuyo.com",            // Spanish (Venezuela)
+	"agenciabrasil.ebc.com.br/rss", // Portuguese (Brazil)
+	"money.udn.com",              // Traditional Chinese (Taiwan)
+}
+
+func isNonEnglish(feedURL string) bool {
+	lower := strings.ToLower(feedURL)
+	for _, f := range nonEnglishFeeds {
+		if strings.Contains(lower, f) {
+			return true
+		}
+	}
+	return false
 }
 
 // IngestAll fetches each feed URL and upserts items. Returns total successful upserts and the last error, if any.
-func IngestAll(ctx context.Context, db *sql.DB, client *http.Client, parser *gofeed.Parser, feedURLs []string, userAgent string) (int, error) {
+func IngestAll(ctx context.Context, db *sql.DB, client *http.Client, parser *gofeed.Parser, feedURLs []string, cfg Config) (int, error) {
 	var total int
 	var lastErr error
 	for _, u := range feedURLs {
@@ -83,7 +114,7 @@ func IngestAll(ctx context.Context, db *sql.DB, client *http.Client, parser *gof
 		if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
 			continue
 		}
-		n, err := ingestOne(ctx, db, client, parser, u, userAgent)
+		n, err := ingestOne(ctx, db, client, parser, u, cfg)
 		total += n
 		if err != nil {
 			lastErr = err
@@ -93,13 +124,13 @@ func IngestAll(ctx context.Context, db *sql.DB, client *http.Client, parser *gof
 	return total, lastErr
 }
 
-func ingestOne(ctx context.Context, db *sql.DB, client *http.Client, parser *gofeed.Parser, feedURL, userAgent string) (int, error) {
+func ingestOne(ctx context.Context, db *sql.DB, client *http.Client, parser *gofeed.Parser, feedURL string, cfg Config) (int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, feedURL, nil)
 	if err != nil {
 		return 0, err
 	}
-	if userAgent != "" {
-		req.Header.Set("User-Agent", userAgent)
+	if cfg.UserAgent != "" {
+		req.Header.Set("User-Agent", cfg.UserAgent)
 	}
 	req.Header.Set("Accept", "application/rss+xml, application/xml, text/xml, */*")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
@@ -120,8 +151,14 @@ func ingestOne(ctx context.Context, db *sql.DB, client *http.Client, parser *gof
 		return 0, err
 	}
 
-	ctxUpsert, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctxUpsert, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
+
+	needsTranslation := isNonEnglish(feedURL)
+	target := cfg.TranslateTarget
+	if target == "" {
+		target = "English"
+	}
 
 	var n int
 	for _, it := range feed.Items {
@@ -142,12 +179,52 @@ func ingestOne(ctx context.Context, db *sql.DB, client *http.Client, parser *gof
 			FeedURL:    feedURL,
 			Published:  pub,
 		}
+
+		// Inline translation for non-English feeds — only for new items
+		if needsTranslation && cfg.OllamaModel != "" && !store.ItemExists(ctxUpsert, db, a.ExternalID) {
+			lang, tit, sum, err := ollama.TranslateToTarget(ctxUpsert, cfg.OllamaBaseURL, cfg.OllamaModel, target, a.Title, a.Summary)
+			if err != nil {
+				log.Printf("rss: translate %q: %v", truncate(a.Title, 40), err)
+				// Still ingest without translation — will appear untranslated
+			} else if strings.EqualFold(strings.TrimSpace(tit), strings.TrimSpace(a.Title)) {
+				log.Printf("rss: translate pass-through: %q", truncate(a.Title, 40))
+				// Pass-through detected — don't store bad translation
+			} else {
+				if lang == "" {
+					lang = "und"
+				}
+				if tit == "" {
+					tit = a.Title
+				}
+				if sum == "" {
+					sum = a.Summary
+				}
+				a.Lang = lang
+				a.TitleTranslated = tit
+				a.SummaryTranslated = sum
+				a.TranslatorModel = cfg.OllamaModel
+			}
+		} else if !needsTranslation && !store.ItemExists(ctxUpsert, db, a.ExternalID) {
+			// Mark English feeds as English so they're not picked up by any translate backfill
+			a.Lang = "en"
+			a.TitleTranslated = a.Title
+			a.SummaryTranslated = a.Summary
+			a.TranslatorModel = "skip"
+		}
+
 		if err := store.UpsertRSS(ctxUpsert, db, a); err != nil {
 			return n, err
 		}
 		n++
 	}
 	return n, nil
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }
 
 func canonicalLink(it *gofeed.Item) string {
