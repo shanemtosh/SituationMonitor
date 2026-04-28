@@ -194,13 +194,26 @@ all_sources:
 - **Special characters**: `#`, `&`, `*`, `!`, `|`, `>`, `{`, `}`, `[`, `]` at the start of a value need quoting.
 - **After writing, validate** by curling the page: `curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/daily/YYYY-MM-DD"` — expect 200. If 500, fix the YAML.
 
-**Writing style:**
+**Writing style (from Reef Insights writing guide):**
 - Intelligence-briefing tone: concise, analytical, direct
 - Lead with significance and implications, not just events
 - Include "why it matters" for each major story
 - When citing non-English sources, credit them (e.g. "per NHK reporting" or "according to Yonhap")
 - Note when Western and Asian coverage diverges on framing or emphasis
 - No fluff, no hedging — be direct about assessments and uncertainties
+- **Data-forward** — anchor claims in specific numbers. Not "prices rose" but "prices rose 14.2% year-over-year"
+- **Source-attributed** — cite sources inline. "Per the CBO," "according to FRED data"
+- **Evidence before assertion** — present the data, then interpret it
+- **Take positions** — this is analysis, not wire service neutrality. Be direct about what the data means
+- **Historical context** — when analyzing a data point, note where it ranks historically
+- **Connect data to consequences** — don't let analysis float at 30,000 feet
+
+**Banned AI writing patterns — do NOT use these:**
+- Banned words: delve, underscore, showcase, illuminate, harness, foster, navigate, unlock, empower, streamline, nuanced, robust, comprehensive, holistic, pivotal, meticulous, landscape, ecosystem, tapestry, paradigm, notably, importantly, crucially, furthermore, moreover, additionally
+- Banned phrases: "It's worth noting," "It cannot be overstated," "In today's fast-paced world," "Now more than ever," "A testament to," "Game-changer," "paradigm shift"
+- Banned constructions: "not X, but rather Y" contrasts, stacked hedges ("may potentially offer certain advantages"), rhetorical question clusters, false balance ("While challenges remain, opportunities abound")
+- Banned structural habits: formulaic transitions (Moreover/Furthermore/Additionally), conclusions that restate everything, moralizing endings, sweeping broadening closes ("Ultimately, this is a question about the human condition")
+- Vary paragraph length. Short for emphasis. Long for complexity. Do not make every paragraph the same length and structure
 
 ### Step 6: Confirm
 

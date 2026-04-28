@@ -33,6 +33,11 @@ type Config struct {
 	NEROnStart       bool
 	SituationMinItems int
 
+	SnippetEnabled  bool
+	SnippetInterval time.Duration
+	SnippetTopN     int
+	SnippetModel    string
+
 	BriefModel string // model for AI briefs (OpenRouter or Ollama)
 
 	RSSFeedsFile     string
@@ -96,6 +101,11 @@ func Load() (Config, error) {
 		NERBatch:          ParseInt("NER_BATCH", 10),
 		NEROnStart:        ParseBool("NER_ON_START", true),
 		SituationMinItems: ParseInt("SITUATION_MIN_ITEMS", 4),
+
+		SnippetEnabled:  ParseBool("SITUATION_SNIPPET_ENABLED", true),
+		SnippetInterval: durSec("SITUATION_SNIPPET_INTERVAL_SEC", 3600),
+		SnippetTopN:     ParseInt("SITUATION_SNIPPET_TOP_N", 30),
+		SnippetModel:    getEnv("OLLAMA_SNIPPET_MODEL", ""),
 
 		BriefModel: getEnv("BRIEF_MODEL", "deepseek/deepseek-v3.2"),
 

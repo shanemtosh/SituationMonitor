@@ -30,8 +30,8 @@ func truncate(s string, n int) string {
 	return s[:n] + "…"
 }
 
-// RunLoop fetches and translates full article content for non-English items.
-// Title/summary translation is now handled inline during RSS ingestion.
+// RunLoop pre-fetches full article content for all items and translates non-English ones.
+// Title/summary translation is handled inline during RSS ingestion.
 func RunLoop(ctx context.Context, db *sql.DB, cfg LoopConfig) {
 	if cfg.PollInterval <= 0 || strings.TrimSpace(cfg.Model) == "" {
 		return
@@ -43,13 +43,13 @@ func RunLoop(ctx context.Context, db *sql.DB, cfg LoopConfig) {
 
 	contentBatch := cfg.ContentBatchSize
 	if contentBatch <= 0 {
-		contentBatch = 3
+		contentBatch = 5
 	}
 
 	run := func() {
 		ctxRun, cancel := context.WithTimeout(ctx, 8*time.Minute)
 		defer cancel()
-		translateContent(ctxRun, db, cfg, target, contentBatch)
+		prefetchContent(ctxRun, db, cfg, target, contentBatch)
 	}
 
 	if cfg.OnStart {
@@ -67,12 +67,12 @@ func RunLoop(ctx context.Context, db *sql.DB, cfg LoopConfig) {
 	}
 }
 
-// translateContent fetches and translates full article content for non-English items
-// that already have their title/summary translated but no content yet.
-func translateContent(ctx context.Context, db *sql.DB, cfg LoopConfig, target string, batch int) {
-	rows, err := store.ListContentUntranslated(ctx, db, batch)
+// prefetchContent fetches full article content for ALL items that don't have it yet.
+// Non-English items also get their content translated via Ollama.
+func prefetchContent(ctx context.Context, db *sql.DB, cfg LoopConfig, target string, batch int) {
+	rows, err := store.ListContentUnfetched(ctx, db, batch)
 	if err != nil {
-		log.Printf("translate-content: list: %v", err)
+		log.Printf("prefetch: list: %v", err)
 		return
 	}
 	if len(rows) == 0 {
@@ -86,38 +86,43 @@ func translateContent(ctx context.Context, db *sql.DB, cfg LoopConfig, target st
 			return
 		}
 
-		// Fetch article content
 		article, err := reader.Fetch(ctx, r.URL, fetchCfg)
 		if err != nil {
-			log.Printf("translate-content: fetch %d (%d/%d) %s: %v", r.ID, i+1, len(rows), truncate(r.URL, 60), err)
-			// Store empty content so we don't retry endlessly
+			log.Printf("prefetch: fetch %d (%d/%d) %s: %v", r.ID, i+1, len(rows), truncate(r.URL, 60), err)
+			// Mark as attempted so we don't retry endlessly
 			_ = store.SetContent(ctx, db, r.ID, "", "")
 			continue
 		}
 
 		if strings.TrimSpace(article.Content) == "" {
-			log.Printf("translate-content: empty content %d (%d/%d)", r.ID, i+1, len(rows))
+			log.Printf("prefetch: empty content %d (%d/%d)", r.ID, i+1, len(rows))
 			_ = store.SetContent(ctx, db, r.ID, "", "")
 			continue
 		}
 
-		// Translate the content
+		// Translate non-English content
 		var translated string
-		if cfg.Model != "" {
+		needsTranslation := r.Lang != "" && r.Lang != "en" && r.Lang != "und" && r.Lang != "skip"
+		if needsTranslation && cfg.Model != "" {
 			translated, err = reader.TranslateContent(ctx, cfg.OllamaBaseURL, cfg.Model, target, article.Content)
 			if err != nil {
-				log.Printf("translate-content: translate %d (%d/%d): %v", r.ID, i+1, len(rows), err)
-				// Still cache the raw content so it's not re-fetched
+				log.Printf("prefetch: translate %d (%d/%d): %v", r.ID, i+1, len(rows), err)
+				// Cache raw content even if translation fails
 				_ = store.SetContent(ctx, db, r.ID, article.Content, "")
 				continue
 			}
 		}
 
 		if err := store.SetContent(ctx, db, r.ID, article.Content, translated); err != nil {
-			log.Printf("translate-content: save %d: %v", r.ID, err)
+			log.Printf("prefetch: save %d: %v", r.ID, err)
 			continue
 		}
-		log.Printf("translate-content: %d (%d/%d): fetched+translated %s", r.ID, i+1, len(rows), truncate(r.URL, 60))
+		if translated != "" {
+			log.Printf("prefetch: %d (%d/%d): fetched+translated %s", r.ID, i+1, len(rows), truncate(r.URL, 60))
+		} else {
+			log.Printf("prefetch: %d (%d/%d): fetched %s", r.ID, i+1, len(rows), truncate(r.URL, 60))
+		}
 	}
-	log.Printf("translate-content: processed %d items", len(rows))
+	log.Printf("prefetch: processed %d items", len(rows))
 }
+

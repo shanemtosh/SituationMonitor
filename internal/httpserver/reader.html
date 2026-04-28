@@ -5,7 +5,7 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>{{.DisplayTitle}} — Situation Monitor</title>
 	<style>
-		:root { color-scheme: dark light; --bg: #fff; --fg: #111; --dim: #888; --dim2: #555; --border: #ddd; --link: #0b5fff; --article-bg: transparent; }
+		:root { color-scheme: dark light; --bg: #fff; --fg: #111; --dim: #888; --dim2: #555; --border: #ddd; --link: #0b5fff; --article-bg: transparent; --tag-bg: #eee; --hover-bg: rgba(128,128,128,0.1); --item-border: #eee; --hl-bg: color-mix(in srgb, #0b5fff 15%, #fff); }
 		* { box-sizing: border-box; margin: 0; padding: 0; }
 		body {
 			font-family: system-ui, -apple-system, sans-serif;
@@ -17,7 +17,7 @@
 			background: var(--bg);
 			color: var(--fg);
 		}
-		body.dark { --bg: #111; --fg: #e8e8e8; --dim: #777; --dim2: #9aa; --border: #333; --link: #6af; --article-bg: transparent; }
+		body.dark { --bg: #111; --fg: #e8e8e8; --dim: #777; --dim2: #9aa; --border: #333; --link: #6af; --article-bg: transparent; --tag-bg: #2a2a2a; --hover-bg: rgba(255,255,255,0.05); --item-border: #222; --hl-bg: color-mix(in srgb, #6af 15%, #111); }
 		nav {
 			display: flex;
 			gap: 0.75rem;
@@ -37,6 +37,9 @@
 		}
 		.theme-btn:hover { opacity: 1; }
 		.theme-btn svg { width: 16px; height: 16px; fill: currentColor; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+		.user-icon { display: flex; align-items: center; opacity: 0.5; }
+		.user-icon:hover { opacity: 1; }
+		.user-icon svg { width: 18px; height: 18px; }
 
 		header { margin-bottom: 1.5rem; }
 		header h1 { font-size: 1.2rem; line-height: 1.35; margin-bottom: 0.4rem; }
@@ -62,6 +65,15 @@
 		}
 		.brief-link:hover { text-decoration: underline; }
 		.brief-link:disabled { opacity: 0.5; cursor: wait; text-decoration: none; }
+		.save-btn {
+			background: none; border: none; cursor: pointer;
+			padding: 0; opacity: 0.4; color: inherit;
+			display: inline-flex; align-items: center;
+			font-size: 0.82rem; font-family: inherit;
+		}
+		.save-btn:hover { opacity: 0.8; }
+		.save-btn.saved { opacity: 0.8; }
+		.save-btn svg { width: 16px; height: 16px; margin-right: 0.25rem; }
 
 		.summary {
 			font-size: 0.92rem;
@@ -85,12 +97,160 @@
 		}
 		.brief-content { font-size: 0.9rem; line-height: 1.7; white-space: pre-wrap; word-wrap: break-word; }
 
+		/* Highlights list (between summary and content) */
+		.highlights-list {
+			margin-bottom: 1.5rem;
+			padding: 0.75rem 0;
+			border-bottom: 1px solid var(--border);
+		}
+		.highlights-list h3 {
+			font-size: 0.72rem;
+			text-transform: uppercase;
+			letter-spacing: 0.06em;
+			color: var(--dim);
+			margin-bottom: 0.5rem;
+		}
+		.hl-item {
+			display: flex;
+			align-items: baseline;
+			gap: 0.5rem;
+			padding: 0.25rem 0;
+			font-size: 0.82rem;
+			color: var(--dim2);
+			cursor: pointer;
+			border-radius: 3px;
+		}
+		.hl-item:hover { color: var(--fg); }
+		.hl-text {
+			flex: 1;
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
+		.hl-note-indicator {
+			font-size: 0.72rem;
+			color: var(--dim);
+			flex-shrink: 0;
+		}
+		.hl-delete {
+			background: none; border: none; cursor: pointer;
+			color: var(--dim); font-size: 0.72rem; padding: 0;
+			flex-shrink: 0; opacity: 0;
+		}
+		.hl-item:hover .hl-delete { opacity: 0.6; }
+		.hl-delete:hover { opacity: 1; color: #d44; }
+
+		/* Highlight popup on text selection */
+		.hl-popup {
+			display: none;
+			position: absolute;
+			background: var(--link);
+			color: var(--bg);
+			border: none;
+			border-radius: 6px;
+			padding: 0.4rem 0.75rem;
+			font-size: 0.82rem;
+			font-weight: 600;
+			cursor: pointer;
+			z-index: 50;
+			box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+			-webkit-tap-highlight-color: transparent;
+			touch-action: manipulation;
+		}
+		.hl-popup:hover { opacity: 0.9; }
+		@media (max-width: 600px) {
+			.hl-popup { padding: 0.5rem 1rem; font-size: 0.9rem; border-radius: 8px; }
+		}
+
 		.article-content {
 			font-size: 0.95rem;
 			line-height: 1.7;
 			white-space: pre-wrap;
 			word-wrap: break-word;
 		}
+		.article-content mark {
+			background: var(--hl-bg);
+			border-radius: 2px;
+			padding: 0.05rem 0;
+			cursor: pointer;
+		}
+
+		/* Notes section */
+		.notes-section {
+			margin-top: 2rem;
+			padding-top: 1.25rem;
+			border-top: 1px solid var(--border);
+		}
+		.notes-section h3 {
+			font-size: 0.78rem;
+			text-transform: uppercase;
+			letter-spacing: 0.06em;
+			color: var(--dim);
+			margin-bottom: 0.75rem;
+		}
+		.note-input {
+			width: 100%;
+			font: inherit;
+			font-size: 0.85rem;
+			line-height: 1.5;
+			padding: 0.5rem 0.65rem;
+			border: 1px solid var(--border);
+			border-radius: 4px;
+			background: transparent;
+			color: inherit;
+			resize: vertical;
+			min-height: 3rem;
+		}
+		.note-input:focus { outline: none; border-color: var(--link); }
+		.note-input::placeholder { color: var(--dim); }
+		.note-actions {
+			display: flex;
+			justify-content: flex-end;
+			margin-top: 0.35rem;
+		}
+		.note-save {
+			font: inherit;
+			font-size: 0.78rem;
+			padding: 0.25rem 0.65rem;
+			border: 1px solid var(--border);
+			border-radius: 4px;
+			background: transparent;
+			color: inherit;
+			cursor: pointer;
+		}
+		.note-save:hover { border-color: var(--link); color: var(--link); }
+		.note-list { list-style: none; margin-top: 0.75rem; }
+		.note-item {
+			padding: 0.5rem 0;
+			border-bottom: 1px solid var(--item-border);
+			font-size: 0.85rem;
+		}
+		.note-item:last-child { border-bottom: none; }
+		.note-meta {
+			font-size: 0.72rem;
+			color: var(--dim);
+			display: flex;
+			gap: 0.5rem;
+			align-items: center;
+			margin-top: 0.15rem;
+		}
+		.note-delete {
+			background: none; border: none; cursor: pointer;
+			color: var(--dim); font-size: 0.72rem; padding: 0;
+		}
+		.note-delete:hover { color: #d44; }
+
+		/* Feed hide link */
+		.feed-hide {
+			font-size: 0.72rem;
+			color: var(--dim);
+			cursor: pointer;
+			background: none;
+			border: none;
+			font-family: inherit;
+			padding: 0;
+		}
+		.feed-hide:hover { color: var(--link); }
 
 		.loading {
 			color: var(--dim);
@@ -245,7 +405,7 @@
 		.footer-spacer { flex: 1; }
 
 		@media (prefers-color-scheme: dark) {
-			:root:not(.light-forced) { --bg: #111; --fg: #e8e8e8; --dim: #777; --dim2: #9aa; --border: #333; --link: #6af; }
+			:root:not(.light-forced) { --bg: #111; --fg: #e8e8e8; --dim: #777; --dim2: #9aa; --border: #333; --link: #6af; --tag-bg: #2a2a2a; --hover-bg: rgba(255,255,255,0.05); --item-border: #222; --hl-bg: color-mix(in srgb, #6af 15%, #111); }
 		}
 		@media print { nav { display: none; } body { padding: 0; } }
 	</style>
@@ -254,8 +414,15 @@
 	<nav>
 		<a href="/">Feed</a>
 		<a href="/daily/">Briefings</a>
-		<a href="/about">About</a>
+		<a href="/situations">Situations</a>
+		<a href="/alpha">Alpha</a>
+		{{if .User}}<a href="/saved">Saved</a>{{end}}
 		<span class="nav-spacer"></span>
+		{{if .User}}
+		<a href="/settings" class="user-icon" title="{{.User.Username}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></a>
+		{{else}}
+		<a href="/login" style="font-size:0.78rem">Sign in</a>
+		{{end}}
 		<button class="theme-btn" id="theme-toggle"></button>
 	</nav>
 
@@ -269,6 +436,8 @@
 		<div class="header-links">
 			{{if .URL}}<a href="{{.URL}}" rel="noopener">View original</a>{{end}}
 			{{if and (not .BriefText) .ItemID}}<button id="brief-btn" class="brief-link" onclick="briefMe({{.ItemID}})">AI brief</button>{{end}}
+			{{if .User}}<button id="save-btn" class="save-btn{{if .IsSaved}} saved{{end}}" onclick="toggleSave()"><svg viewBox="0 0 24 24" fill="{{if .IsSaved}}currentColor{{else}}none{{end}}" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>{{if .IsSaved}}Saved{{else}}Save{{end}}</button>{{end}}
+			{{if and .User .FeedURL}}<button class="feed-hide" onclick="hideFeed('{{.FeedURL}}',this)">Hide feed</button>{{end}}
 		</div>
 	</header>
 
@@ -289,6 +458,11 @@
 		</div>
 	</div>
 
+	<div id="highlights-list" class="highlights-list" style="display:none">
+		<h3>Your highlights</h3>
+		<div id="hl-items"></div>
+	</div>
+
 	{{if .FetchFailed}}
 	<div class="external-notice">
 		<p>This article is available on the publisher's site.</p>
@@ -297,14 +471,28 @@
 	{{else if .Error}}
 	<p class="error-msg">{{.Error}}</p>
 	{{else if .Content}}
-	<div class="article-content">{{.Content}}</div>
+	<div class="article-content" id="article-content">{{.Content}}</div>
 	{{if .WasTranslated}}
 	<p class="translate-notice">Translated from {{.Lang}} by {{.TranslatorModel}}</p>
 	{{end}}
 	{{else if not .IsInternal}}
-	<p class="content-notice">Full article content available on internal network. <a href="{{.URL}}" rel="noopener">View original source</a>.</p>
+	<div class="external-notice">
+		<p>This article is available on the publisher's site.</p>
+		{{if .URL}}<a href="{{.URL}}" rel="noopener" class="external-link">Read on {{if .FeedName}}{{.FeedName}}{{else}}original site{{end}}</a>{{end}}
+	</div>
 	{{else}}
 	<p class="loading">Fetching article content…</p>
+	{{end}}
+
+	{{if .User}}
+	<div class="notes-section">
+		<h3>Notes</h3>
+		<textarea id="note-input" class="note-input" placeholder="Add a note…" rows="2"></textarea>
+		<div class="note-actions">
+			<button id="note-save-btn" class="note-save" onclick="saveNote()">Save note</button>
+		</div>
+		<ul id="note-list" class="note-list"></ul>
+	</div>
 	{{end}}
 
 	{{if or .Entities .Situations}}
@@ -336,6 +524,8 @@
 	</div>
 	{{end}}
 
+	<div id="hl-popup" class="hl-popup">Highlight</div>
+
 	<footer>
 		<a href="/">Situation Monitor</a>
 	</footer>
@@ -343,12 +533,18 @@
 	<div class="site-footer">
 		<span>&copy; 2026 Mimir</span>
 		<span class="footer-spacer"></span>
+		<a href="/about">About</a>
 		<a href="/terms">Terms</a>
 		<a href="/privacy">Privacy</a>
 		<a href="/content-notice">Content Notice</a>
 	</div>
 
 	<script>
+	var ITEM_ID = {{.ItemID}};
+	var IS_LOGGED_IN = {{if .User}}true{{else}}false{{end}};
+	var highlights = [];
+	var notes = [];
+
 	function renderBrief(text) {
 		return text
 			.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
@@ -379,17 +575,229 @@
 			el.innerHTML = renderBrief(el.textContent);
 		}
 	})();
+
+	// === Save/Unsave ===
+	function toggleSave() {
+		var btn = document.getElementById('save-btn');
+		var saved = btn.classList.contains('saved');
+		if (saved) {
+			fetch('/actions?item_id=' + ITEM_ID).then(function(r){ return r.json(); }).then(function(actions){
+				var a = actions.find(function(x){ return x.action === 'save'; });
+				if (a) fetch('/actions/' + a.id + '/delete', {method:'POST'}).then(function(){
+					btn.classList.remove('saved');
+					btn.querySelector('svg').setAttribute('fill','none');
+					btn.lastChild.textContent = 'Save';
+				});
+			});
+		} else {
+			fetch('/actions', {
+				method:'POST', headers:{'Content-Type':'application/json'},
+				body: JSON.stringify({item_id: ITEM_ID, action: 'save'})
+			}).then(function(){
+				btn.classList.add('saved');
+				btn.querySelector('svg').setAttribute('fill','currentColor');
+				btn.lastChild.textContent = 'Saved';
+			});
+		}
+	}
+
+	// === Hide Feed ===
+	function hideFeed(url, btn) {
+		fetch('/actions', {
+			method:'POST', headers:{'Content-Type':'application/json'},
+			body: JSON.stringify({action: 'hide_feed', data: {feed_url: url}})
+		}).then(function(){ btn.textContent = 'Feed hidden'; btn.disabled = true; });
+	}
+
+	// === Highlights ===
+	function loadActions() {
+		if (!IS_LOGGED_IN) return;
+		fetch('/actions?item_id=' + ITEM_ID).then(function(r){ return r.json(); }).then(function(actions){
+			highlights = actions.filter(function(a){ return a.action === 'highlight'; });
+			notes = actions.filter(function(a){ return a.action === 'note'; });
+			renderHighlightsList();
+			applyHighlightsToContent();
+			renderNotesList();
+		});
+	}
+
+	function renderHighlightsList() {
+		var container = document.getElementById('hl-items');
+		var section = document.getElementById('highlights-list');
+		if (highlights.length === 0) { section.style.display = 'none'; return; }
+		section.style.display = 'block';
+		container.innerHTML = highlights.map(function(h){
+			var d = typeof h.data === 'string' ? JSON.parse(h.data) : h.data;
+			var text = d.text || '';
+			var noteIndicator = d.note ? ' *' : '';
+			return '<div class="hl-item" onclick="scrollToHighlight(' + h.id + ')">'
+				+ '<span class="hl-text">"' + escHtml(text) + '"</span>'
+				+ (d.note ? '<span class="hl-note-indicator">' + escHtml(d.note) + '</span>' : '')
+				+ '<button class="hl-delete" onclick="event.stopPropagation();deleteHighlight(' + h.id + ')">remove</button>'
+				+ '</div>';
+		}).join('');
+	}
+
+	function applyHighlightsToContent() {
+		var el = document.getElementById('article-content');
+		if (!el) return;
+		var text = el.textContent;
+		// Sort highlights by position (start offset) descending so we can insert marks from end
+		var sorted = highlights.slice().map(function(h){
+			var d = typeof h.data === 'string' ? JSON.parse(h.data) : h.data;
+			return {id: h.id, start: d.start || 0, end: d.end || 0, text: d.text || ''};
+		}).sort(function(a,b){ return b.start - a.start; });
+
+		// Rebuild content with <mark> tags
+		sorted.forEach(function(h){
+			if (h.start >= 0 && h.end > h.start && h.end <= text.length) {
+				var before = text.substring(0, h.start);
+				var matched = text.substring(h.start, h.end);
+				var after = text.substring(h.end);
+				text = before + '\x00MARK_START_' + h.id + '\x00' + matched + '\x00MARK_END\x00' + after;
+			}
+		});
+		// Convert markers to HTML
+		text = escHtml(text)
+			.replace(/\x00MARK_START_(\d+)\x00/g, '<mark data-hl-id="$1" id="hl-$1">')
+			.replace(/\x00MARK_END\x00/g, '</mark>');
+		el.innerHTML = text;
+	}
+
+	function scrollToHighlight(id) {
+		var mark = document.getElementById('hl-' + id);
+		if (mark) mark.scrollIntoView({behavior:'smooth', block:'center'});
+	}
+
+	function deleteHighlight(id) {
+		fetch('/actions/' + id + '/delete', {method:'POST'}).then(function(){ loadActions(); });
+	}
+
+	// Text selection → highlight popup (desktop + mobile)
+	(function(){
+		var popup = document.getElementById('hl-popup');
+		if (!IS_LOGGED_IN) return;
+
+		function showPopupForSelection() {
+			var sel = window.getSelection();
+			if (!sel || sel.isCollapsed || sel.toString().trim().length < 3) {
+				popup.style.display = 'none';
+				return;
+			}
+			var articleEl = document.getElementById('article-content');
+			if (!articleEl) { popup.style.display = 'none'; return; }
+			var range = sel.getRangeAt(0);
+			if (!articleEl.contains(range.commonAncestorContainer)) {
+				popup.style.display = 'none';
+				return;
+			}
+			var rect = range.getBoundingClientRect();
+			popup.style.display = 'block';
+			// Position above selection, clamped to viewport
+			var left = Math.max(8, Math.min(rect.left + window.scrollX + rect.width/2 - 35, window.innerWidth - 80));
+			popup.style.left = left + 'px';
+			popup.style.top = (rect.top + window.scrollY - 34) + 'px';
+
+			popup.onclick = function(){
+				var selectedText = sel.toString().trim();
+				var fullText = articleEl.textContent;
+				var start = fullText.indexOf(selectedText);
+				if (start === -1) start = 0;
+				var end = start + selectedText.length;
+
+				fetch('/actions', {
+					method:'POST', headers:{'Content-Type':'application/json'},
+					body: JSON.stringify({
+						item_id: ITEM_ID, action: 'highlight',
+						data: {start: start, end: end, text: selectedText}
+					})
+				}).then(function(){
+					popup.style.display = 'none';
+					sel.removeAllRanges();
+					loadActions();
+				});
+			};
+		}
+
+		document.addEventListener('mouseup', showPopupForSelection);
+		// Mobile: selectionchange fires after touch selection is complete
+		document.addEventListener('selectionchange', function(){
+			// Debounce — only show after selection settles
+			clearTimeout(popup._debounce);
+			popup._debounce = setTimeout(showPopupForSelection, 300);
+		});
+		document.addEventListener('mousedown', function(e){
+			if (e.target !== popup) popup.style.display = 'none';
+		});
+		document.addEventListener('touchstart', function(e){
+			// Don't dismiss if tapping the popup itself or if there's an active selection
+			if (e.target === popup) return;
+			var sel = window.getSelection();
+			if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) return;
+			popup.style.display = 'none';
+		});
+	})();
+
+	// === Notes ===
+	function renderNotesList() {
+		var list = document.getElementById('note-list');
+		if (!list) return;
+		if (notes.length === 0) { list.innerHTML = ''; return; }
+		list.innerHTML = notes.map(function(n){
+			var d = typeof n.data === 'string' ? JSON.parse(n.data) : n.data;
+			return '<li class="note-item">'
+				+ '<div>' + escHtml(d.text || '') + '</div>'
+				+ '<div class="note-meta"><span>' + (n.created_at||'').split('T')[0] + '</span>'
+				+ '<button class="note-delete" onclick="deleteNote(' + n.id + ')">delete</button></div>'
+				+ '</li>';
+		}).join('');
+	}
+
+	function deleteNote(id) {
+		fetch('/actions/' + id + '/delete', {method:'POST'}).then(function(){ loadActions(); });
+	}
+
+	function saveNote() {
+		var input = document.getElementById('note-input');
+		if (!input) return;
+		var text = input.value.trim();
+		if (!text) return;
+		fetch('/actions', {
+			method:'POST', headers:{'Content-Type':'application/json'},
+			body: JSON.stringify({item_id: ITEM_ID, action: 'note', data: {text: text}})
+		}).then(function(){
+			input.value = '';
+			loadActions();
+		});
+	}
+
+	(function(){
+		var input = document.getElementById('note-input');
+		if (!input) return;
+		input.addEventListener('keydown', function(e){
+			if (e.ctrlKey && e.key === 'Enter') { saveNote(); }
+		});
+	})();
+
+	function escHtml(s) {
+		var d = document.createElement('div');
+		d.textContent = s;
+		return d.innerHTML;
+	}
+
+	// Load actions on page load
+	if (IS_LOGGED_IN) loadActions();
+
+	// === Knowledge Graph ===
 	function toggleEntity(el, name) {
 		var panel = document.getElementById('kg-related');
 		var title = document.getElementById('kg-related-title');
 		var list = document.getElementById('kg-related-list');
-		// Toggle off if same entity clicked
 		if (el.classList.contains('active')) {
 			el.classList.remove('active');
 			panel.style.display = 'none';
 			return;
 		}
-		// Clear other active states
 		document.querySelectorAll('.kg-entity.active, .kg-situation.active').forEach(function(a){ a.classList.remove('active'); });
 		el.classList.add('active');
 		title.textContent = name;
@@ -444,12 +852,14 @@
 			})
 			.catch(function(){ list.innerHTML = '<li style="color:var(--dim)">Failed to load.</li>'; });
 	}
+
+	// === Theme toggle ===
 	(function(){
 		var SUN='<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
 		var MOON='<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>';
 		var b=document.getElementById('theme-toggle'),s=localStorage.getItem('sm-theme');
 		function d(m){return m==='dark'||(!m&&window.matchMedia('(prefers-color-scheme:dark)').matches)}
-		function a(m){if(m==='dark'){document.body.classList.add('dark');document.documentElement.classList.add('light-forced')}else if(m==='light'){document.body.classList.remove('dark');document.documentElement.classList.add('light-forced')}else{document.body.classList.remove('dark');document.documentElement.classList.remove('light-forced')}b.innerHTML=d(m)?SUN:MOON}
+		function a(m){if(m==='dark'){document.body.classList.add('dark');document.documentElement.classList.add('light-forced')}else if(m==='light'){document.body.classList.remove('dark');document.documentElement.classList.add('light-forced')}else{document.body.classList.remove('dark');document.documentElement.classList.remove('light-forced')}b.innerHTML=d(m)?MOON:SUN}
 		a(s);b.addEventListener('click',function(){var n=d(s)?'light':'dark';localStorage.setItem('sm-theme',n);s=n;a(n)});
 	})();
 	</script>

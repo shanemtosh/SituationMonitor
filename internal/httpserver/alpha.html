@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>{{.DomainLabel}} - Alpha - Situation Monitor</title>
+	<style>
+		:root { color-scheme: dark light; --bg: #fff; --fg: #111; --dim: #888; --border: #ddd; --card-border: #ddd; --item-border: #eee; --tag-bg: #eee; --hover-bg: rgba(128,128,128,0.1); --green: #2a7; --red: #c44; --amber: #b80; --blue: #47a; }
+		* { box-sizing: border-box; margin: 0; padding: 0; }
+		body {
+			font-family: system-ui, -apple-system, sans-serif;
+			line-height: 1.5;
+			padding: 1rem 1rem 4rem;
+			max-width: 860px;
+			margin: 0 auto;
+			min-height: 100dvh;
+			background: var(--bg);
+			color: var(--fg);
+		}
+		body.dark { --bg: #111; --fg: #e8e8e8; --dim: #777; --border: #333; --card-border: #333; --item-border: #222; --tag-bg: #2a2a2a; --hover-bg: rgba(255,255,255,0.05); --green: #3b8; --red: #e55; --amber: #d90; --blue: #6ae; }
+
+		nav {
+			display: flex;
+			gap: 0.75rem;
+			align-items: center;
+			font-size: 0.85rem;
+			padding: 0.5rem 0 1rem;
+			border-bottom: 1px solid var(--border);
+			margin-bottom: 1.25rem;
+			flex-wrap: wrap;
+		}
+		nav a { text-decoration: none; color: inherit; opacity: 0.6; }
+		nav a:hover { opacity: 1; }
+		nav .active { opacity: 1; font-weight: 600; }
+		.nav-spacer { flex: 1; }
+		.theme-btn {
+			background: none; border: none; cursor: pointer;
+			padding: 0.25rem; opacity: 0.5;
+			color: inherit; display: flex; align-items: center;
+		}
+		.theme-btn:hover { opacity: 1; }
+		.theme-btn svg { width: 16px; height: 16px; fill: currentColor; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+
+		h1 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+		.subtitle { font-size: 0.85rem; color: var(--dim); margin-bottom: 1.5rem; }
+
+		section { margin-bottom: 2rem; }
+		h2 {
+			font-size: 0.8rem;
+			text-transform: uppercase;
+			letter-spacing: 0.05em;
+			color: var(--dim);
+			margin-bottom: 0.75rem;
+		}
+
+		.empty { color: var(--dim); font-size: 0.85rem; font-style: italic; }
+
+		/* Assessment cards */
+		.assessment-card {
+			border: 1px solid var(--card-border);
+			border-radius: 6px;
+			padding: 0.75rem 1rem;
+			margin-bottom: 0.75rem;
+			cursor: pointer;
+			transition: border-color 0.15s;
+		}
+		.assessment-card:hover { border-color: var(--fg); }
+		.assessment-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: flex-start;
+			gap: 0.5rem;
+		}
+		.assessment-title { font-weight: 600; font-size: 0.95rem; }
+		.assessment-prob {
+			font-size: 1.1rem;
+			font-weight: 700;
+			font-variant-numeric: tabular-nums;
+			white-space: nowrap;
+		}
+		.assessment-meta {
+			font-size: 0.78rem;
+			color: var(--dim);
+			margin-top: 0.25rem;
+			display: flex;
+			gap: 0.75rem;
+			flex-wrap: wrap;
+		}
+		.lens-tag, .status-tag {
+			display: inline-block;
+			font-size: 0.7rem;
+			padding: 0.1rem 0.4rem;
+			border-radius: 3px;
+			text-transform: uppercase;
+			letter-spacing: 0.03em;
+		}
+		.lens-tag { background: var(--tag-bg); }
+		.status-active { color: var(--green); }
+		.status-watching { color: var(--amber); }
+		.status-resolved { color: var(--dim); }
+
+		/* Assessment detail (expanded) */
+		.assessment-detail {
+			display: none;
+			margin-top: 0.75rem;
+			padding-top: 0.75rem;
+			border-top: 1px solid var(--item-border);
+			font-size: 0.85rem;
+		}
+		.assessment-card.expanded .assessment-detail { display: block; }
+		.detail-section { margin-bottom: 0.75rem; }
+		.detail-label { font-weight: 600; font-size: 0.75rem; text-transform: uppercase; color: var(--dim); margin-bottom: 0.25rem; }
+		.detail-text { white-space: pre-wrap; }
+		.cases { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; }
+		@media (max-width: 600px) { .cases { grid-template-columns: 1fr; } }
+		.case-card {
+			border: 1px solid var(--item-border);
+			border-radius: 4px;
+			padding: 0.5rem;
+		}
+		.case-label { font-weight: 600; font-size: 0.72rem; text-transform: uppercase; margin-bottom: 0.15rem; }
+		.case-base .case-label { color: var(--dim); }
+		.case-bull .case-label { color: var(--green); }
+		.case-bear .case-label { color: var(--red); }
+
+		/* Constraints */
+		.constraint-row {
+			display: flex;
+			align-items: center;
+			gap: 0.5rem;
+			padding: 0.35rem 0;
+			border-bottom: 1px solid var(--item-border);
+			font-size: 0.82rem;
+		}
+		.constraint-row:last-child { border-bottom: none; }
+		.constraint-type {
+			font-size: 0.68rem;
+			text-transform: uppercase;
+			min-width: 5rem;
+			color: var(--dim);
+		}
+		.constraint-name { flex: 1; }
+		.dir-constraining { color: var(--red); }
+		.dir-enabling { color: var(--green); }
+		.dir-neutral { color: var(--dim); }
+		.weight-fulcrum { font-weight: 700; }
+		.mut-tag {
+			font-size: 0.65rem;
+			padding: 0.05rem 0.3rem;
+			border-radius: 2px;
+			background: var(--tag-bg);
+		}
+
+		/* Probability timeline */
+		.update-row {
+			display: flex;
+			gap: 0.5rem;
+			align-items: baseline;
+			padding: 0.3rem 0;
+			border-bottom: 1px solid var(--item-border);
+			font-size: 0.82rem;
+		}
+		.update-row:last-child { border-bottom: none; }
+		.update-date { color: var(--dim); font-size: 0.75rem; min-width: 5.5rem; }
+		.update-shift { font-weight: 600; font-variant-numeric: tabular-nums; min-width: 6rem; }
+		.shift-up { color: var(--green); }
+		.shift-down { color: var(--red); }
+		.update-evidence { flex: 1; color: var(--dim); }
+
+		/* Calendar */
+		.cal-row {
+			display: flex;
+			gap: 0.75rem;
+			align-items: baseline;
+			padding: 0.4rem 0;
+			border-bottom: 1px solid var(--item-border);
+			font-size: 0.85rem;
+		}
+		.cal-row:last-child { border-bottom: none; }
+		.cal-date { font-variant-numeric: tabular-nums; min-width: 6rem; color: var(--dim); font-size: 0.8rem; }
+		.cal-title { flex: 1; }
+		.cal-type {
+			font-size: 0.68rem;
+			text-transform: uppercase;
+			padding: 0.1rem 0.35rem;
+			border-radius: 3px;
+			background: var(--tag-bg);
+		}
+		.relevance-high { border-left: 3px solid var(--red); padding-left: 0.5rem; }
+		.relevance-medium { border-left: 3px solid var(--amber); padding-left: 0.5rem; }
+		.relevance-low { border-left: 3px solid var(--dim); padding-left: 0.5rem; }
+	</style>
+</head>
+<body>
+	<nav>
+		<a href="/">Feed</a>
+		<a href="/daily/">Briefings</a>
+		<a href="/situations">Situations</a>
+		<a href="/alpha">Alpha</a>
+		<span style="opacity:0.4">/</span>
+		<a href="/alpha/{{.Domain}}" class="active">{{.DomainLabel}}</a>
+		<span class="nav-spacer"></span>
+		<button class="theme-btn" id="theme-toggle" title="Toggle theme"></button>
+	</nav>
+
+	<h1>{{.DomainLabel}}</h1>
+	<p class="subtitle">Constraint-based analysis &middot; Papic framework</p>
+
+	<section id="assessments-section">
+		<h2>Active Net Assessments</h2>
+		<div id="assessments-list"><span class="empty">Loading...</span></div>
+	</section>
+
+	<section id="calendar-section">
+		<h2>Upcoming Events (30 days)</h2>
+		<div id="calendar-list"><span class="empty">Loading...</span></div>
+	</section>
+
+	<section id="updates-section">
+		<h2>Recent Probability Updates</h2>
+		<div id="updates-list"><span class="empty">Loading...</span></div>
+	</section>
+
+	<script>
+	// Theme
+	(function(){
+		const saved = localStorage.getItem('theme');
+		if (saved === 'dark' || (!saved && matchMedia('(prefers-color-scheme:dark)').matches)) {
+			document.body.classList.add('dark');
+		}
+		document.getElementById('theme-toggle').addEventListener('click', () => {
+			document.body.classList.toggle('dark');
+			localStorage.setItem('theme', document.body.classList.contains('dark') ? 'dark' : 'light');
+		});
+		function setIcon() {
+			const dark = document.body.classList.contains('dark');
+			document.getElementById('theme-toggle').innerHTML = dark
+				? '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>'
+				: '<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>';
+		}
+		setIcon();
+		new MutationObserver(setIcon).observe(document.body, {attributes: true, attributeFilter: ['class']});
+	})();
+
+	function pct(v) { return v != null ? Math.round(v * 100) + '%' : '?'; }
+	function shortDate(s) {
+		if (!s) return '';
+		const d = new Date(s);
+		return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+	}
+	function relDate(s) {
+		if (!s) return '';
+		const d = new Date(s);
+		const diff = Date.now() - d.getTime();
+		const hrs = Math.floor(diff / 3600000);
+		if (hrs < 1) return Math.floor(diff / 60000) + 'm ago';
+		if (hrs < 24) return hrs + 'h ago';
+		return Math.floor(hrs / 24) + 'd ago';
+	}
+
+	async function load() {
+		try {
+			const resp = await fetch('/api/alpha/dashboard?domain={{.Domain}}');
+			const data = await resp.json();
+			renderAssessments(data.assessments || []);
+			renderCalendar(data.calendar || []);
+			renderUpdates(data.recent_updates || []);
+		} catch(e) {
+			document.getElementById('assessments-list').innerHTML = '<span class="empty">Failed to load data</span>';
+		}
+	}
+
+	function renderAssessments(list) {
+		const el = document.getElementById('assessments-list');
+		if (!list.length) { el.innerHTML = '<span class="empty">No active assessments yet. Run /geopolitical-alpha to create one.</span>'; return; }
+		el.innerHTML = list.map(a => {
+			const prob = pct(a.CurrentProbability || a.current_probability);
+			const lens = a.Lens || a.lens || 'cyclical';
+			const title = a.Title || a.title;
+			const summary = a.Summary || a.summary || '';
+			const baseCase = a.BaseCase || a.base_case || '';
+			const bullCase = a.BullCase || a.bull_case || '';
+			const bearCase = a.BearCase || a.bear_case || '';
+			const implications = a.InvestmentImplications || a.investment_implications || '';
+			const id = a.ID || a.id;
+			const updated = a.UpdatedAt || a.updated_at;
+			return `
+			<div class="assessment-card" data-id="${id}" onclick="toggleDetail(this)">
+				<div class="assessment-header">
+					<div>
+						<div class="assessment-title">${esc(title)}</div>
+						<div class="assessment-meta">
+							<span class="lens-tag">${lens}</span>
+							<span>Updated ${relDate(updated)}</span>
+						</div>
+					</div>
+					<div class="assessment-prob">${prob}</div>
+				</div>
+				<div class="assessment-detail">
+					${summary ? `<div class="detail-section"><div class="detail-label">Summary</div><div class="detail-text">${esc(summary)}</div></div>` : ''}
+					${(baseCase || bullCase || bearCase) ? `
+					<div class="detail-section">
+						<div class="detail-label">Scenarios</div>
+						<div class="cases">
+							${baseCase ? `<div class="case-card case-base"><div class="case-label">Base</div>${esc(baseCase)}</div>` : ''}
+							${bullCase ? `<div class="case-card case-bull"><div class="case-label">Bull</div>${esc(bullCase)}</div>` : ''}
+							${bearCase ? `<div class="case-card case-bear"><div class="case-label">Bear</div>${esc(bearCase)}</div>` : ''}
+						</div>
+					</div>` : ''}
+					${implications ? `<div class="detail-section"><div class="detail-label">Investment Implications</div><div class="detail-text">${esc(implications)}</div></div>` : ''}
+					<div class="detail-section" id="constraints-${id}"><div class="detail-label">Constraints</div><span class="empty">Loading...</span></div>
+					<div class="detail-section" id="updates-${id}"><div class="detail-label">Probability History</div><span class="empty">Loading...</span></div>
+				</div>
+			</div>`;
+		}).join('');
+	}
+
+	async function toggleDetail(card) {
+		const wasExpanded = card.classList.contains('expanded');
+		document.querySelectorAll('.assessment-card.expanded').forEach(c => c.classList.remove('expanded'));
+		if (wasExpanded) return;
+		card.classList.add('expanded');
+
+		const id = card.dataset.id;
+		try {
+			const resp = await fetch('/api/assessments/' + id);
+			const data = await resp.json();
+
+			// Render constraints
+			const cEl = document.getElementById('constraints-' + id);
+			const constraints = data.constraints || [];
+			if (constraints.length) {
+				cEl.innerHTML = '<div class="detail-label">Constraints</div>' +
+					constraints.map(c => {
+						const dir = c.Direction || c.direction || 'neutral';
+						const weight = c.Weight || c.weight || 'medium';
+						const mut = c.Mutability || c.mutability || 'medium';
+						const type_ = c.Type || c.type;
+						const name_ = c.Name || c.name;
+						return `<div class="constraint-row">
+							<span class="constraint-type">${esc(type_)}</span>
+							<span class="constraint-name dir-${dir} ${weight === 'fulcrum' ? 'weight-fulcrum' : ''}">${esc(name_)}${weight === 'fulcrum' ? ' [FULCRUM]' : ''}</span>
+							<span class="mut-tag">${mut}</span>
+						</div>`;
+					}).join('');
+			} else {
+				cEl.innerHTML = '<div class="detail-label">Constraints</div><span class="empty">No constraints linked</span>';
+			}
+
+			// Render updates
+			const uEl = document.getElementById('updates-' + id);
+			const updates = data.updates || [];
+			if (updates.length) {
+				uEl.innerHTML = '<div class="detail-label">Probability History</div>' +
+					updates.map(u => {
+						const prior = u.Prior || u.prior;
+						const post = u.Posterior || u.posterior;
+						const diff = post - prior;
+						const cls = diff > 0 ? 'shift-up' : diff < 0 ? 'shift-down' : '';
+						const sign = diff > 0 ? '+' : '';
+						return `<div class="update-row">
+							<span class="update-date">${shortDate(u.CreatedAt || u.created_at)}</span>
+							<span class="update-shift ${cls}">${pct(prior)} &rarr; ${pct(post)} (${sign}${Math.round(diff*100)}pp)</span>
+							<span class="update-evidence">${esc(u.Evidence || u.evidence)}</span>
+						</div>`;
+					}).join('');
+			} else {
+				uEl.innerHTML = '<div class="detail-label">Probability History</div><span class="empty">No updates yet</span>';
+			}
+		} catch(e) {}
+	}
+
+	function renderCalendar(list) {
+		const el = document.getElementById('calendar-list');
+		if (!list.length) { el.innerHTML = '<span class="empty">No upcoming events. Run /geopolitical-alpha to populate the calendar.</span>'; return; }
+		el.innerHTML = list.map(e => {
+			const rel = e.MarketRelevance || e.market_relevance || 'medium';
+			const type_ = e.EventType || e.event_type || 'other';
+			const date = e.EventDate || e.event_date;
+			const title = e.Title || e.title;
+			const desc = e.Description || e.description || '';
+			return `<div class="cal-row relevance-${rel}">
+				<span class="cal-date">${date}</span>
+				<span class="cal-title">${esc(title)}${desc ? '<br><small style="color:var(--dim)">' + esc(desc) + '</small>' : ''}</span>
+				<span class="cal-type">${type_}</span>
+			</div>`;
+		}).join('');
+	}
+
+	function renderUpdates(list) {
+		const el = document.getElementById('updates-list');
+		if (!list.length) { el.innerHTML = '<span class="empty">No probability updates yet.</span>'; return; }
+		el.innerHTML = list.map(u => {
+			const prior = u.Prior || u.prior;
+			const post = u.Posterior || u.posterior;
+			const diff = post - prior;
+			const cls = diff > 0 ? 'shift-up' : diff < 0 ? 'shift-down' : '';
+			const sign = diff > 0 ? '+' : '';
+			return `<div class="update-row">
+				<span class="update-date">${relDate(u.CreatedAt || u.created_at)}</span>
+				<span class="update-shift ${cls}">${pct(prior)} &rarr; ${pct(post)} (${sign}${Math.round(diff*100)}pp)</span>
+				<span class="update-evidence">${esc(u.Evidence || u.evidence)}</span>
+			</div>`;
+		}).join('');
+	}
+
+	function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+	load();
+	</script>
+</body>
+</html>

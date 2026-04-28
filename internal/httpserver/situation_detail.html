@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>{{.Situation.Name}} — Situation Monitor</title>
+	<style>
+		:root { color-scheme: dark light; --bg: #fff; --fg: #111; --dim: #888; --border: #ddd; --item-border: #eee; --tag-bg: #eee; }
+		* { box-sizing: border-box; margin: 0; padding: 0; }
+		body {
+			font-family: system-ui, -apple-system, sans-serif;
+			line-height: 1.5;
+			padding: 1rem 1rem 4rem;
+			max-width: 720px;
+			margin: 0 auto;
+			min-height: 100dvh;
+			background: var(--bg);
+			color: var(--fg);
+		}
+		body.dark { --bg: #111; --fg: #e8e8e8; --dim: #777; --border: #333; --item-border: #222; --tag-bg: #2a2a2a; }
+		nav {
+			display: flex;
+			gap: 0.75rem;
+			align-items: center;
+			font-size: 0.85rem;
+			padding: 0.5rem 0 1rem;
+			border-bottom: 1px solid var(--border);
+			margin-bottom: 1.25rem;
+			flex-wrap: wrap;
+		}
+		nav a { text-decoration: none; color: inherit; opacity: 0.6; }
+		nav a:hover { opacity: 1; }
+		nav .active { opacity: 1; font-weight: 600; }
+		.nav-spacer { flex: 1; }
+		.theme-btn { background: none; border: none; cursor: pointer; padding: 0.25rem; opacity: 0.5; color: inherit; display: flex; align-items: center; }
+		.theme-btn:hover { opacity: 1; }
+		.theme-btn svg { width: 16px; height: 16px; fill: currentColor; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+		.user-icon { display: flex; align-items: center; opacity: 0.5; }
+		.user-icon:hover { opacity: 1; }
+
+		.crumb { font-size: 0.8rem; color: var(--dim); margin-bottom: 0.5rem; }
+		.crumb a { color: var(--dim); text-decoration: none; }
+		.crumb a:hover { color: var(--fg); }
+		h1 { font-size: 1.4rem; margin-bottom: 0.35rem; }
+		.status { display: inline-block; font-size: 0.75rem; padding: 0.1rem 0.45rem; border-radius: 3px; background: var(--tag-bg); color: var(--dim); text-transform: uppercase; letter-spacing: 0.04em; vertical-align: middle; margin-left: 0.5rem; }
+		.status.resolved { opacity: 0.6; }
+		.status.watching { color: #c80; }
+		.meta { font-size: 0.78rem; color: var(--dim); margin-bottom: 1.25rem; display: flex; gap: 0.6rem; flex-wrap: wrap; }
+
+		.snippet-block { padding: 0.85rem 1rem; border-left: 3px solid var(--dim); background: var(--tag-bg); margin-bottom: 1.5rem; font-size: 0.95rem; }
+		.snippet-block .snippet-when { display: block; font-size: 0.7rem; color: var(--dim); margin-top: 0.4rem; text-transform: uppercase; letter-spacing: 0.05em; }
+		.snippet-block.empty { color: var(--dim); font-style: italic; }
+
+		section { margin-bottom: 2rem; }
+		h2 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); margin-bottom: 0.6rem; }
+
+		.item { padding: 0.7rem 0; border-bottom: 1px solid var(--item-border); }
+		.item-title { font-weight: 600; font-size: 0.95rem; }
+		.item-title a { color: inherit; text-decoration: none; }
+		.item-title a:hover { text-decoration: underline; }
+		.item-meta { font-size: 0.72rem; color: var(--dim); margin-top: 0.2rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+		.item-summary { font-size: 0.86rem; color: var(--fg); margin-top: 0.3rem; line-height: 1.45; }
+		.urg-5 { border-left: 3px solid #d44; padding-left: 0.6rem; margin-left: -0.6rem; }
+		.urg-4 { border-left: 3px solid #d80; padding-left: 0.6rem; margin-left: -0.6rem; }
+
+		.children-list { list-style: none; }
+		.children-list li { padding: 0.35rem 0; }
+		.children-list a { color: inherit; text-decoration: none; font-size: 0.9rem; }
+		.children-list a:hover { text-decoration: underline; }
+		.children-list .count { color: var(--dim); font-size: 0.75rem; margin-left: 0.4rem; }
+
+		.empty { color: var(--dim); font-style: italic; font-size: 0.9rem; padding: 0.5rem 0; }
+
+		.site-footer { font-size: 0.75rem; color: var(--dim); padding-top: 1rem; margin-top: 2rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+		.site-footer a { color: var(--dim); text-decoration: none; }
+		.site-footer a:hover { color: var(--fg); }
+		.footer-spacer { flex: 1; }
+		@media (prefers-color-scheme: dark) {
+			:root:not(.light-forced) { --bg: #111; --fg: #e8e8e8; --dim: #777; --border: #333; --item-border: #222; --tag-bg: #2a2a2a; }
+		}
+	</style>
+</head>
+<body>
+	<nav>
+		<a href="/">Feed</a>
+		<a href="/daily/">Briefings</a>
+		<a href="/situations" class="active">Situations</a>
+		<a href="/alpha">Alpha</a>
+		{{if .User}}<a href="/saved">Saved</a>{{end}}
+		<span class="nav-spacer"></span>
+		{{if .User}}<a href="/settings" class="user-icon" title="{{.User.Username}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:18px;height:18px"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></a>{{else}}<a href="/login" style="font-size:0.78rem">Sign in</a>{{end}}
+		<button class="theme-btn" id="theme-toggle"></button>
+	</nav>
+
+	<div class="crumb">
+		<a href="/situations">Situations</a>
+		{{if .Parent}} &raquo; <a href="/situations/{{.Parent.Slug}}">{{.Parent.Name}}</a>{{end}}
+	</div>
+
+	<h1>{{.Situation.Name}}<span class="status {{.Situation.Status}}">{{.Situation.Status}}</span></h1>
+	<div class="meta">
+		<span>{{.Situation.ItemCount}} items</span>
+		{{if .ActivityAgo}}<span>active {{.ActivityAgo}}</span>{{end}}
+		<span>tracked since {{.CreatedAgo}}</span>
+	</div>
+
+	{{if .Situation.Snippet}}
+	<div class="snippet-block">
+		{{.Situation.Snippet}}
+		{{if .SnippetAgo}}<span class="snippet-when">snippet refreshed {{.SnippetAgo}}</span>{{end}}
+	</div>
+	{{else}}
+	<div class="snippet-block empty">No snippet generated yet — the worker refreshes hourly.</div>
+	{{end}}
+
+	{{if .Children}}
+	<section>
+		<h2>Sub-situations</h2>
+		<ul class="children-list">
+			{{range .Children}}
+			<li><a href="/situations/{{.Slug}}">{{.Name}}</a><span class="count">{{.ItemCount}} items</span></li>
+			{{end}}
+		</ul>
+	</section>
+	{{end}}
+
+	<section>
+		<h2>Recent items</h2>
+		{{if .Items}}
+		{{range .Items}}
+		<div class="item urg-{{.Urgency}}">
+			<div class="item-title">
+				{{if .URL}}<a href="{{.URL}}" target="_blank" rel="noopener">{{if .DisplayTitle}}{{.DisplayTitle}}{{else}}{{.Title}}{{end}}</a>{{else}}{{if .DisplayTitle}}{{.DisplayTitle}}{{else}}{{.Title}}{{end}}{{end}}
+			</div>
+			<div class="item-meta">
+				{{if .Source}}<span>{{.Source}}</span>{{end}}
+				<span>{{.AgeAgo}}</span>
+				{{if ge .Urgency 4}}<span>urgency {{.Urgency}}</span>{{end}}
+			</div>
+			{{if .DisplaySummary}}<div class="item-summary">{{.DisplaySummary}}</div>{{end}}
+		</div>
+		{{end}}
+		{{else}}
+		<p class="empty">No items linked yet.</p>
+		{{end}}
+	</section>
+
+	<div class="site-footer">
+		<span>&copy; 2026 Mimir</span>
+		<span class="footer-spacer"></span>
+		<a href="/about">About</a>
+		<a href="/terms">Terms</a>
+		<a href="/privacy">Privacy</a>
+		<a href="/content-notice">Content Notice</a>
+	</div>
+
+	<script>
+	(function(){
+		var SUN = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+		var MOON = '<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>';
+		var themeBtn = document.getElementById('theme-toggle');
+		var stored = localStorage.getItem('sm-theme');
+		function isDark(mode) { return mode === 'dark' || (!mode && window.matchMedia('(prefers-color-scheme:dark)').matches); }
+		function applyTheme(mode) {
+			if (mode === 'dark') { document.body.classList.add('dark'); document.documentElement.classList.add('light-forced'); }
+			else if (mode === 'light') { document.body.classList.remove('dark'); document.documentElement.classList.add('light-forced'); }
+			else { document.body.classList.remove('dark'); document.documentElement.classList.remove('light-forced'); }
+			themeBtn.innerHTML = isDark(mode) ? MOON : SUN;
+		}
+		applyTheme(stored);
+		themeBtn.addEventListener('click', function(){
+			var next = isDark(stored) ? 'light' : 'dark';
+			localStorage.setItem('sm-theme', next);
+			stored = next;
+			applyTheme(next);
+		});
+	})();
+	</script>
+</body>
+</html>

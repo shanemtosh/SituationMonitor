@@ -4,6 +4,13 @@ us|https://rss.nytimes.com/services/xml/rss/nyt/World.xml
 uk|https://www.theguardian.com/world/rss
 mideast|https://www.aljazeera.com/xml/rss/all.xml
 
+# Financial Times — homepage (top stories)
+uk|https://www.ft.com/rss/home
+# Financial Times — world
+uk|https://www.ft.com/world?format=rss
+# Financial Times — markets
+markets|https://www.ft.com/markets?format=rss
+
 # === US News ===
 # NPR Politics (US politics/policy)
 us|https://feeds.npr.org/1014/rss.xml
@@ -63,6 +70,9 @@ eeurope|https://notesfrompoland.com/feed/
 eeurope|https://balkaninsight.com/feed/
 # YLE News (English, Finnish public broadcaster — Nordic/Russia coverage)
 eeurope|https://feeds.yle.fi/uutiset/v1/recent.rss?publisherIds=YLE_NEWS&language=en
+
+# Asia Times (English, geo-political analysis across Asia)
+asia|https://asiatimes.com/feed/
 
 # === East Asia ===
 # NHK (Japanese) — translated by Ollama

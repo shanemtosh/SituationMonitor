@@ -22,6 +22,7 @@ import (
 	"situationmonitor/internal/market"
 	"situationmonitor/internal/ollama"
 	"situationmonitor/internal/extract"
+	"situationmonitor/internal/snippet"
 	"situationmonitor/internal/store"
 	"situationmonitor/internal/translate"
 )
@@ -145,6 +146,23 @@ func main() {
 		})
 	}
 
+	// Situation snippet worker — Ollama-generated rolling summaries for /situations
+	if cfg.SnippetEnabled && cfg.SnippetInterval > 0 && ollamaMgr != nil {
+		snippetModel := cfg.SnippetModel
+		if snippetModel == "" {
+			snippetModel = nerModel // fall back to NER model (nemotron-mini)
+		}
+		if snippetModel != "" {
+			go snippet.RunLoop(ctx, sqlDB, snippet.LoopConfig{
+				OllamaBaseURL: cfg.OllamaBaseURL,
+				Model:         snippetModel,
+				Interval:      cfg.SnippetInterval,
+				TopN:          cfg.SnippetTopN,
+				PerCallSleep:  60 * time.Second,
+			})
+		}
+	}
+
 	if cfg.TreasuryPoll > 0 {
 		go treasury.RunLoop(ctx, treasury.Config{
 			PollInterval:  cfg.TreasuryPoll,
@@ -182,7 +200,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	httpserver.Mount(mux, sqlDB, pagesDir, httpserver.ReaderConfig{
+	handler := httpserver.Mount(mux, sqlDB, pagesDir, httpserver.ReaderConfig{
 		OllamaBaseURL:     cfg.OllamaBaseURL,
 		OllamaModel:       cfg.OllamaTranslate,
 		TargetLang:        cfg.TranslateTarget,
@@ -194,7 +212,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              cfg.ListenAddr,
-		Handler:           mux,
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

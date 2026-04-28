@@ -31,7 +31,11 @@ type FetchConfig struct {
 
 // Fetch downloads a URL and extracts readable article content.
 // Fallback chain: direct fetch → archive/cache bypass → Playwright (if configured).
+// The entire operation is bounded to 45s to prevent blocking callers.
 func Fetch(ctx context.Context, rawURL string, cfg FetchConfig) (Article, error) {
+	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	defer cancel()
+
 	// 1. Try direct fetch
 	article, err := fetchDirect(ctx, rawURL)
 	if err == nil {
@@ -267,11 +271,20 @@ func stripToArticleBody(text string) string {
 }
 
 // fetchViaBypass tries free archive/cache services to get paywalled content.
+// Each attempt gets a short timeout since these are speculative.
 func fetchViaBypass(ctx context.Context, rawURL string) (Article, error) {
-	// Try archive.org Wayback Machine (often has cached versions)
-	archiveURL := "https://web.archive.org/web/2/" + rawURL
-	article, err := fetchDirect(ctx, archiveURL)
-	if err == nil && len(article.Content) > 200 {
+	tryFetch := func(fetchURL string) (Article, bool) {
+		bypassCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+		defer cancel()
+		article, err := fetchDirect(bypassCtx, fetchURL)
+		if err == nil && len(article.Content) > 200 {
+			return article, true
+		}
+		return Article{}, false
+	}
+
+	// Try archive.org Wayback Machine
+	if article, ok := tryFetch("https://web.archive.org/web/2/" + rawURL); ok {
 		return article, nil
 	}
 
@@ -279,16 +292,13 @@ func fetchViaBypass(ctx context.Context, rawURL string) (Article, error) {
 	u, _ := url.Parse(rawURL)
 	if u != nil {
 		ampURL := fmt.Sprintf("https://%s.cdn.ampproject.org/c/s/%s%s", strings.ReplaceAll(u.Host, ".", "-"), u.Host, u.Path)
-		article, err = fetchDirect(ctx, ampURL)
-		if err == nil && len(article.Content) > 200 {
+		if article, ok := tryFetch(ampURL); ok {
 			return article, nil
 		}
 	}
 
 	// Try 12ft.io
-	twelveURL := "https://12ft.io/" + rawURL
-	article, err = fetchDirect(ctx, twelveURL)
-	if err == nil && len(article.Content) > 200 {
+	if article, ok := tryFetch("https://12ft.io/" + rawURL); ok {
 		return article, nil
 	}
 

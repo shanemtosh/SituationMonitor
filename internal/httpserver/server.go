@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"database/sql"
 	_ "embed"
 	"encoding/json"
@@ -52,7 +53,8 @@ type ReaderConfig struct {
 
 // Mount registers HTTP routes on mux. pagesDir is the directory where
 // generated daily briefing YAML files are stored (e.g. "data/pages").
-func Mount(mux *http.ServeMux, db *sql.DB, pagesDir string, rc ReaderConfig) {
+// Returns an http.Handler wrapped with auth middleware.
+func Mount(mux *http.ServeMux, db *sql.DB, pagesDir string, rc ReaderConfig) http.Handler {
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte("ok\n"))
@@ -63,6 +65,8 @@ func Mount(mux *http.ServeMux, db *sql.DB, pagesDir string, rc ReaderConfig) {
 	mux.HandleFunc("GET /api/sweeps", handleSweepsJSON(db))
 	mux.HandleFunc("GET /daily/", handleDailyIndex(pagesDir))
 	mux.HandleFunc("GET /daily/{date}", handleDailyPage(pagesDir))
+	mux.HandleFunc("GET /api/daily/{date}", handleDailyYAML(pagesDir))
+	mux.HandleFunc("GET /daily/{date}/audio", handleDailyAudio(pagesDir))
 	mux.HandleFunc("GET /about", handleAbout())
 	mux.HandleFunc("GET /terms", handleLegalPage("Terms of Use", termsBody))
 	mux.HandleFunc("GET /privacy", handleLegalPage("Privacy Policy", privacyBody))
@@ -72,7 +76,28 @@ func Mount(mux *http.ServeMux, db *sql.DB, pagesDir string, rc ReaderConfig) {
 	mux.HandleFunc("GET /api/situations", handleSituationsJSON(db))
 	mux.HandleFunc("GET /api/situations/{slug}", handleSituationDetail(db))
 	mux.HandleFunc("GET /api/entities/{name}", handleEntityDetail(db))
+	mux.HandleFunc("GET /situations", handleSituationsListPage(db))
+	mux.HandleFunc("GET /situations/{slug}", handleSituationDetailPage(db))
 	mountManageRoutes(mux, db)
+	mountAlphaRoutes(mux, db)
+
+	// Auth routes
+	mux.HandleFunc("GET /login", handleLogin(db))
+	mux.HandleFunc("POST /login", handleLoginPost(db))
+	mux.HandleFunc("POST /logout", handleLogout(db))
+
+	// User action routes (outside /api/ — nginx blocks POST/DELETE to /api/)
+	mux.HandleFunc("POST /actions", handleActionsAPI(db))
+	mux.HandleFunc("GET /actions", handleActionsAPI(db))
+	mux.HandleFunc("POST /actions/{id}/delete", handleDeleteAction(db))
+
+	// Saved page
+	mux.HandleFunc("GET /saved", handleSaved(db))
+
+	// Settings page
+	mux.HandleFunc("GET /settings", handleSettings(db))
+
+	return withUser(db, mux)
 }
 
 type itemJSON struct {
@@ -191,14 +216,17 @@ type dashItem struct {
 }
 
 type dashData struct {
-	Quotes []dashQuote
-	Items  []dashItem
-	Filter store.ItemFilter
+	Quotes   []dashQuote
+	Items    []dashItem
+	Filter   store.ItemFilter
+	User     *store.User
+	SavedIDs map[int64]bool
 }
 
 func handleDashboard(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
+		u := UserFromContext(ctx)
 		f := parseItemFilter(r)
 		if r.URL.Query().Get("hours") == "" {
 			f.Hours = 72
@@ -208,6 +236,13 @@ func handleDashboard(db *sql.DB) http.HandlerFunc {
 		}
 		if r.URL.Query().Get("min_u") == "" {
 			f.MinUrgency = 1 // hide low-relevance items (urgency=0) by default
+		}
+
+		// Apply user's hidden feeds
+		if u != nil {
+			if hidden, err := store.HiddenFeedURLs(ctx, db, u.ID); err == nil {
+				f.ExcludeFeeds = hidden
+			}
 		}
 
 		items, err := store.ListItems(ctx, db, f)
@@ -224,6 +259,17 @@ func handleDashboard(db *sql.DB) http.HandlerFunc {
 				FetchedAt: q.FetchedAt.UTC().Format(time.RFC3339),
 			})
 		}
+
+		// Build set of saved item IDs for this user
+		savedIDs := make(map[int64]bool)
+		if u != nil {
+			if saved, err := store.ListSavedItems(ctx, db, u.ID); err == nil {
+				for _, s := range saved {
+					savedIDs[s.ID] = true
+				}
+			}
+		}
+
 		di := make([]dashItem, 0, len(items))
 		for _, it := range items {
 			var tags []string
@@ -244,7 +290,7 @@ func handleDashboard(db *sql.DB) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_ = dashboardTmpl.Execute(w, dashData{Quotes: dq, Items: di, Filter: f})
+		_ = dashboardTmpl.Execute(w, dashData{Quotes: dq, Items: di, Filter: f, User: u, SavedIDs: savedIDs})
 	}
 }
 
@@ -327,6 +373,45 @@ var knownFeeds = map[string]string{
 	"kedglobal.com":         "KED Global",
 	// Supply chain
 	"supplychaindive.com":   "Supply Chain Dive",
+}
+
+// spaceParagraphs normalizes single-newline paragraph breaks into double-newlines
+// so pre-wrap rendering shows clear visual separation between paragraphs.
+func spaceParagraphs(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	// Split on any run of newlines, rejoin with double newlines
+	parts := strings.Split(s, "\n")
+	var out []string
+	for _, p := range parts {
+		p = strings.TrimRight(p, " \t")
+		if p == "" {
+			continue
+		}
+		out = append(out, p)
+	}
+	return strings.Join(out, "\n\n")
+}
+
+// dedupSummary clears DisplaySummary if it substantially overlaps the article content,
+// avoiding showing the same text twice in the reader.
+func dedupSummary(data *readerData) {
+	if data.DisplaySummary == "" || data.Content == "" {
+		return
+	}
+	s := strings.TrimSpace(data.DisplaySummary)
+	c := strings.TrimSpace(data.Content)
+	if len(s) < 100 {
+		return
+	}
+	// Check if summary is contained in content, or they share a common opening
+	// (translations may rephrase slightly, so use a short prefix for fuzzy match)
+	prefix := s
+	if len(prefix) > 150 {
+		prefix = prefix[:150]
+	}
+	if strings.Contains(c, s) || strings.Contains(s, c) || strings.HasPrefix(c, prefix) {
+		data.DisplaySummary = ""
+	}
 }
 
 func feedName(feedURL string) string {
@@ -446,6 +531,13 @@ type briefingData struct {
 	Social     string           `yaml:"social"`
 	Watchlist  []briefingWatch  `yaml:"watchlist"`
 	AllSources []briefingSource `yaml:"all_sources"`
+	User       *store.User      `yaml:"-"`
+	AudioURL   string           `yaml:"-"`
+}
+
+// pageData wraps simple pages that only need a User for nav display.
+type pageData struct {
+	User *store.User
 }
 
 //go:embed briefing.html
@@ -471,8 +563,43 @@ func handleDailyPage(pagesDir string) http.HandlerFunc {
 			http.Error(w, "bad briefing data", http.StatusInternalServerError)
 			return
 		}
+		b.User = UserFromContext(r.Context())
+		// Check if audio version exists
+		mp3Path := filepath.Join(pagesDir, date+".mp3")
+		if _, err := os.Stat(mp3Path); err == nil {
+			b.AudioURL = fmt.Sprintf("/daily/%s/audio", date)
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = briefingTmpl.Execute(w, b)
+	}
+}
+
+func handleDailyYAML(pagesDir string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		date := r.PathValue("date")
+		if !dateRe.MatchString(date) {
+			http.NotFound(w, r)
+			return
+		}
+		raw, err := os.ReadFile(filepath.Join(pagesDir, date+".yaml"))
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
+		w.Write(raw)
+	}
+}
+
+func handleDailyAudio(pagesDir string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		date := r.PathValue("date")
+		if !dateRe.MatchString(date) {
+			http.NotFound(w, r)
+			return
+		}
+		mp3Path := filepath.Join(pagesDir, date+".mp3")
+		http.ServeFile(w, r, mp3Path)
 	}
 }
 
@@ -481,6 +608,15 @@ var dailyIndexHTML string
 
 var dailyIndexTmpl = template.Must(template.New("daily-index").Parse(dailyIndexHTML))
 
+type dailyIndexData struct {
+	User    *store.User
+	Entries []dailyEntry
+}
+type dailyEntry struct {
+	Date string
+	URL  string
+}
+
 func handleDailyIndex(pagesDir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/daily/" {
@@ -488,23 +624,19 @@ func handleDailyIndex(pagesDir string) http.HandlerFunc {
 			return
 		}
 		entries, _ := os.ReadDir(pagesDir)
-		type briefing struct {
-			Date string
-			URL  string
-		}
-		var list []briefing
+		var list []dailyEntry
 		for _, e := range entries {
 			name := e.Name()
 			if strings.HasSuffix(name, ".yaml") {
 				date := strings.TrimSuffix(name, ".yaml")
 				if dateRe.MatchString(date) {
-					list = append(list, briefing{Date: date, URL: fmt.Sprintf("/daily/%s", date)})
+					list = append(list, dailyEntry{Date: date, URL: fmt.Sprintf("/daily/%s", date)})
 				}
 			}
 		}
 		sort.Slice(list, func(i, j int) bool { return list[i].Date > list[j].Date })
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_ = dailyIndexTmpl.Execute(w, list)
+		_ = dailyIndexTmpl.Execute(w, dailyIndexData{User: UserFromContext(r.Context()), Entries: list})
 	}
 }
 
@@ -532,6 +664,7 @@ type readerData struct {
 	URL             string
 	SourceKind      string
 	FeedName        string
+	FeedURL         string
 	Lang            string
 	CreatedAt       string
 	Content         string
@@ -544,6 +677,9 @@ type readerData struct {
 	IsInternal      bool // true when accessed via Tailscale/localhost
 	Entities        []readerEntity
 	Situations      []readerSituation
+	User            *store.User
+	IsSaved         bool
+	Actions         []store.UserAction
 }
 
 func handleReader(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
@@ -563,17 +699,24 @@ func handleReader(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
 		}
 
 		internal := isInternalRequest(r)
+		u := UserFromContext(ctx)
 
 		data := readerData{
 			DisplayTitle: item.Title,
 			URL:          item.URL,
 			SourceKind:   item.SourceKind,
 			FeedName:     feedName(item.FeedURL),
+			FeedURL:      item.FeedURL,
 			Lang:         item.Lang,
 			CreatedAt:    item.CreatedAt,
 			ItemID:       id,
 			BriefText:    item.BriefText,
 			IsInternal:   internal,
+			User:         u,
+		}
+		if u != nil {
+			data.IsSaved, _ = store.IsItemSaved(ctx, db, u.ID, id)
+			data.Actions, _ = store.GetItemActions(ctx, db, u.ID, id)
 		}
 		if item.TitleTranslated != "" {
 			data.DisplayTitle = item.TitleTranslated
@@ -596,16 +739,15 @@ func handleReader(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
 			}
 		}
 
-		// Full content: only serve to internal requests
-		if !internal {
-			// Public access: show summary only, no full article
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			_ = readerTmpl.Execute(w, data)
-			return
-		}
-
 		// Serve cached content if available
 		if item.ContentFetchedAt != "" {
+			// Paywalled sources: only show fetched content to internal users
+			if !internal && isPaywalledSource(item.URL) {
+				data.FetchFailed = true
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				_ = readerTmpl.Execute(w, data)
+				return
+			}
 			if item.ContentTranslated != "" {
 				data.Content = item.ContentTranslated
 				data.WasTranslated = true
@@ -613,12 +755,14 @@ func handleReader(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
 			} else {
 				data.Content = item.ContentText
 			}
+			data.Content = spaceParagraphs(data.Content)
+			dedupSummary(&data)
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			_ = readerTmpl.Execute(w, data)
 			return
 		}
 
-		// Fetch article content on demand
+		// Fetch article content on demand (fallback — should be pre-fetched by worker)
 		if item.URL == "" {
 			data.Error = "No URL available for this item."
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -626,7 +770,10 @@ func handleReader(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
 			return
 		}
 
-		article, err := reader.Fetch(ctx, item.URL, reader.FetchConfig{
+		fetchCtx, fetchCancel := context.WithTimeout(ctx, 20*time.Second)
+		defer fetchCancel()
+
+		article, err := reader.Fetch(fetchCtx, item.URL, reader.FetchConfig{
 			PaywallFetcherURL: rc.PaywallFetcherURL,
 		})
 		if err != nil {
@@ -656,6 +803,14 @@ func handleReader(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
 			log.Printf("reader: cache %d: %v", id, err)
 		}
 
+		// Don't display paywalled content to public users
+		if !internal && isPaywalledSource(item.URL) {
+			data.FetchFailed = true
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_ = readerTmpl.Execute(w, data)
+			return
+		}
+
 		if contentTranslated != "" {
 			data.Content = contentTranslated
 			data.WasTranslated = true
@@ -664,27 +819,60 @@ func handleReader(db *sql.DB, rc ReaderConfig) http.HandlerFunc {
 			data.Content = contentText
 		}
 
+		data.Content = spaceParagraphs(data.Content)
+		dedupSummary(&data)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = readerTmpl.Execute(w, data)
 	}
 }
 
-// isInternalRequest returns true if the request comes from localhost, Tailscale,
-// or has the X-Internal header set by nginx for trusted origins.
+// isInternalRequest returns true if the request comes from Tailscale or localhost
+// (direct access, not behind nginx). When behind nginx, X-Forwarded-For carries
+// the real client IP — we check that instead of RemoteAddr (which is always 127.0.0.1).
 func isInternalRequest(r *http.Request) bool {
-	// Check X-Internal header (set by nginx for Tailscale-origin requests)
+	// If nginx set X-Internal, trust it
 	if r.Header.Get("X-Internal") == "true" {
 		return true
 	}
-	// Check if direct localhost access
-	host := r.Host
-	if strings.HasPrefix(host, "127.0.0.1") || strings.HasPrefix(host, "localhost") || strings.HasPrefix(host, "[::1]") {
+
+	// Determine the real client IP: prefer X-Forwarded-For (set by nginx),
+	// fall back to RemoteAddr for direct connections.
+	clientIP := r.RemoteAddr
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// X-Forwarded-For may be "client, proxy1, proxy2" — first is the real client
+		clientIP = strings.TrimSpace(strings.Split(xff, ",")[0])
+	}
+
+	// Tailscale IPs (100.64.0.0/10)
+	if strings.HasPrefix(clientIP, "100.") {
 		return true
 	}
-	// Check RemoteAddr for local connections
-	remote := r.RemoteAddr
-	if strings.HasPrefix(remote, "127.0.0.1") || strings.HasPrefix(remote, "[::1]") || strings.HasPrefix(remote, "100.") {
-		return true // 100.x.y.z = Tailscale
+
+	// Direct localhost access (no nginx)
+	if strings.HasPrefix(clientIP, "127.0.0.1") || strings.HasPrefix(clientIP, "[::1]") || clientIP == "::1" {
+		// Only trust this if there's no X-Forwarded-For (i.e., not behind nginx)
+		if r.Header.Get("X-Forwarded-For") == "" {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isPaywalledSource returns true if the URL belongs to a publication whose
+// full content should only be shown to internal/Tailscale users.
+func isPaywalledSource(articleURL string) bool {
+	paywalled := []string{
+		"wsj.com",
+		"nytimes.com",
+		"ft.com",
+		"digitimes.com",
+	}
+	lower := strings.ToLower(articleURL)
+	for _, domain := range paywalled {
+		if strings.Contains(lower, domain) {
+			return true
+		}
 	}
 	return false
 }
@@ -692,7 +880,7 @@ func isInternalRequest(r *http.Request) bool {
 func handleAbout() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_ = aboutTmpl.Execute(w, nil)
+		_ = aboutTmpl.Execute(w, pageData{User: UserFromContext(r.Context())})
 	}
 }
 

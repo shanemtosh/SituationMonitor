@@ -13,6 +13,7 @@ type ItemRow struct {
 	Summary string
 	FeedURL string
 	URL     string
+	Lang    string
 }
 
 // ListUntranslated returns items missing title_translated (bounded).
@@ -68,6 +69,37 @@ LIMIT ?
 	for rows.Next() {
 		var r ItemRow
 		if err := rows.Scan(&r.ID, &r.Title, &r.Summary, &r.FeedURL, &r.URL); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// ListContentUnfetched returns ALL items (any language) that have a URL but
+// no content_fetched_at yet, ordered newest-first. This drives the content
+// pre-fetch worker so articles are cached before users click them.
+func ListContentUnfetched(ctx context.Context, db *sql.DB, limit int) ([]ItemRow, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	rows, err := db.QueryContext(ctx, `
+SELECT id, title, COALESCE(summary,''), COALESCE(feed_url,''), COALESCE(url,''), COALESCE(lang,'')
+FROM items
+WHERE (content_fetched_at IS NULL OR content_fetched_at = '')
+  AND COALESCE(url,'') != ''
+ORDER BY datetime(created_at) DESC
+LIMIT ?
+`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []ItemRow
+	for rows.Next() {
+		var r ItemRow
+		if err := rows.Scan(&r.ID, &r.Title, &r.Summary, &r.FeedURL, &r.URL, &r.Lang); err != nil {
 			return nil, err
 		}
 		out = append(out, r)

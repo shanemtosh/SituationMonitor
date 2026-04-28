@@ -52,6 +52,34 @@ The skill runs a Step 0 knowledge graph curation (merge duplicate situations, fi
 - `config/feeds.txt` — RSS feed URLs
 - `data/pages/` — generated daily briefing YAML files
 - `.claude/skills/daily-briefing.md` — Claude skill for generating briefings
+- `internal/httpserver/alpha.go` — multi-domain alpha API endpoints and page handlers
+- `internal/httpserver/alpha_landing.html` — alpha landing page (domain cards)
+- `internal/httpserver/alpha.html` — per-domain dashboard (templatized)
+- `internal/store/constraint.go` — constraint CRUD (domain-aware)
+- `internal/store/assessment.go` — net assessment CRUD, assessment-constraint links, probability updates
+- `internal/store/calendar.go` — alpha calendar CRUD (was geo_calendar)
+- `internal/store/datastream.go` — data stream CRUD
+- `internal/store/domain.go` — domain summary queries
+- `.claude/skills/geopolitical-alpha.md` — Claude skill: geopolitical constraint analysis
+- `.claude/skills/macro-alpha.md` — Claude skill: macro & monetary policy analysis
+- `.claude/skills/semiconductors-alpha.md` — Claude skill: semiconductor & technology analysis
+- `.claude/skills/energy-alpha.md` — Claude skill: energy market analysis
+
+## Constraint-Based Alpha
+
+Multi-domain analysis layer using Marko Papic's framework. Claude is the analyst — the system provides storage, APIs, and UI for persisting and displaying constraint-based analysis across four domains.
+
+**Core concept:** Forecast based on what actors *can actually do* (constraints), not what they *want* (preferences). Each domain has a Claude skill for performing analysis.
+
+**Domains:**
+- `geopolitics` — `/geopolitical-alpha` — political, economic, geopolitical, constitutional, time constraints
+- `macro` — `/macro-alpha` — monetary, fiscal, labor, inflationary, time constraints
+- `semiconductors` — `/semiconductors-alpha` — physical, capacity, regulatory, economic, competitive constraints
+- `energy` — `/energy-alpha` — supply, demand, infrastructure, regulatory, geopolitical constraints
+
+**Tables:** `constraints`, `net_assessments`, `assessment_constraints`, `probability_updates`, `alpha_calendar`, `data_streams` — all domain-aware via `domain` column
+
+**UI:** `/alpha` — landing page with domain cards. `/alpha/{domain}` — per-domain dashboard.
 
 ## API endpoints
 
@@ -74,6 +102,31 @@ The skill runs a Step 0 knowledge graph curation (merge duplicate situations, fi
 - `POST /api/situations/{id}/rename` — `{"name": "New Name"}`
 - `POST /api/situations/{id}/status` — `{"status": "active|resolved|watching"}`
 - `DELETE /api/situations/{id}` — delete situation
+
+### Alpha APIs (all support `?domain=` filter)
+- `GET /api/alpha/domains` — domain summaries (assessment/constraint/event counts)
+- `GET /api/alpha/dashboard?domain=` — composite: active assessments + calendar + updates
+- `GET /api/constraints?situation_id=&domain=&type=&region=&status=` — list constraints
+- `POST /api/constraints` — create constraint
+- `GET /api/constraints/{id}` — get constraint
+- `PUT /api/constraints/{id}` — update constraint
+- `DELETE /api/constraints/{id}` — delete constraint
+- `GET /api/assessments?situation_id=&domain=&lens=&status=` — list assessments
+- `POST /api/assessments` — create assessment
+- `GET /api/assessments/{id}` — detail with constraints and update history
+- `PUT /api/assessments/{id}` — update assessment
+- `DELETE /api/assessments/{id}` — delete assessment
+- `POST /api/assessments/{id}/update-probability` — log Bayesian update
+- `POST /api/assessments/{id}/constraints` — link constraint to assessment
+- `DELETE /api/assessments/{aid}/constraints/{cid}` — unlink constraint
+- `GET /api/calendar?from=&to=&domain=&region=&status=` — list calendar events
+- `POST /api/calendar` — create calendar event
+- `PUT /api/calendar/{id}` — update calendar event
+- `DELETE /api/calendar/{id}` — delete calendar event
+- `GET /api/data-streams?constraint_id=` — list data streams
+- `POST /api/data-streams` — create data stream
+- `PUT /api/data-streams/{id}` — update data stream
+- `DELETE /api/data-streams/{id}` — delete data stream
 
 ## Build & run
 

@@ -38,6 +38,9 @@
 		}
 		.theme-btn:hover { opacity: 1; }
 		.theme-btn svg { width: 16px; height: 16px; fill: currentColor; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+		.user-icon { display: flex; align-items: center; opacity: 0.5; }
+		.user-icon:hover { opacity: 1; }
+		.user-icon svg { width: 18px; height: 18px; }
 		h1 { font-size: 1.25rem; margin-bottom: 1.25rem; }
 		p { margin-bottom: 0.75rem; font-size: 0.95rem; color: var(--fg); }
 		a { color: var(--link); }
@@ -68,8 +71,11 @@
 	<nav>
 		<a href="/">Feed</a>
 		<a href="/daily/">Briefings</a>
-		<a href="/about" class="active">About</a>
+		<a href="/situations">Situations</a>
+		<a href="/alpha">Alpha</a>
+		{{if .User}}<a href="/saved">Saved</a>{{end}}
 		<span class="nav-spacer"></span>
+		{{if .User}}<a href="/settings" class="user-icon" title="{{.User.Username}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:18px;height:18px"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></a>{{else}}<a href="/login" style="font-size:0.78rem">Sign in</a>{{end}}
 		<button class="theme-btn" id="theme-toggle"></button>
 	</nav>
 
@@ -104,6 +110,7 @@
 	<div class="site-footer">
 		<span>&copy; 2026 Mimir</span>
 		<span class="footer-spacer"></span>
+		<a href="/about">About</a>
 		<a href="/terms">Terms</a>
 		<a href="/privacy">Privacy</a>
 		<a href="/content-notice">Content Notice</a>
@@ -129,7 +136,7 @@
 				document.body.classList.remove('dark');
 				document.documentElement.classList.remove('light-forced');
 			}
-			themeBtn.innerHTML = isDark(mode) ? SUN : MOON;
+			themeBtn.innerHTML = isDark(mode) ? MOON : SUN;
 		}
 		applyTheme(stored);
 		themeBtn.addEventListener('click', function(){

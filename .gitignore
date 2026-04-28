@@ -3,3 +3,6 @@
 /data/
 .env
 *.db
+docs/reef-agent-skill.md
+scripts/tts/.venv/
+services/paywall-fetcher/node_modules/

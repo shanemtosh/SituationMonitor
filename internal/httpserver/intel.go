@@ -28,16 +28,19 @@ type situationJSON struct {
 }
 
 type sitOutJSON struct {
-	ID          int64        `json:"id"`
-	Name        string       `json:"name"`
-	Slug        string       `json:"slug"`
-	Description string       `json:"description,omitempty"`
-	Status      string       `json:"status"`
-	CreatedAt   string       `json:"created_at"`
-	UpdatedAt   string       `json:"updated_at"`
-	ItemCount   int          `json:"item_count"`
-	ParentID    *int64       `json:"parent_id,omitempty"`
-	Children    []sitOutJSON `json:"children,omitempty"`
+	ID                 int64        `json:"id"`
+	Name               string       `json:"name"`
+	Slug               string       `json:"slug"`
+	Description        string       `json:"description,omitempty"`
+	Status             string       `json:"status"`
+	CreatedAt          string       `json:"created_at"`
+	UpdatedAt          string       `json:"updated_at"`
+	ItemCount          int          `json:"item_count"`
+	ParentID           *int64       `json:"parent_id,omitempty"`
+	Snippet            string       `json:"snippet,omitempty"`
+	SnippetGeneratedAt string       `json:"snippet_generated_at,omitempty"`
+	LastItemAt         string       `json:"last_item_at,omitempty"`
+	Children           []sitOutJSON `json:"children,omitempty"`
 }
 
 func situationToJSON(s store.SituationRow) sitOutJSON {
@@ -45,6 +48,8 @@ func situationToJSON(s store.SituationRow) sitOutJSON {
 		ID: s.ID, Name: s.Name, Slug: s.Slug, Description: s.Description,
 		Status: s.Status, CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt,
 		ItemCount: s.ItemCount, ParentID: s.ParentID,
+		Snippet: s.Snippet, SnippetGeneratedAt: s.SnippetGeneratedAt,
+		LastItemAt: s.LastItemAt,
 	}
 	for _, c := range s.Children {
 		out.Children = append(out.Children, situationToJSON(c))
@@ -235,11 +240,15 @@ func handleSituationsJSON(db *sql.DB) http.HandlerFunc {
 		}
 
 		tree := r.URL.Query().Get("tree") == "true"
+		order := r.URL.Query().Get("order")
 		var sits []store.SituationRow
 		var err error
-		if tree {
+		switch {
+		case tree:
 			sits, err = store.ListSituationsTree(ctx, db, status, limit)
-		} else {
+		case order == "activity":
+			sits, err = store.ListSituationsByActivity(ctx, db, status, limit)
+		default:
 			sits, err = store.ListSituations(ctx, db, status, limit)
 		}
 		if err != nil {

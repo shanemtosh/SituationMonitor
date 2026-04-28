@@ -11,16 +11,19 @@ import (
 
 // SituationRow represents a tracked situation/event.
 type SituationRow struct {
-	ID          int64
-	Name        string
-	Slug        string
-	Description string
-	Status      string
-	CreatedAt   string
-	UpdatedAt   string
-	ItemCount   int
-	ParentID    *int64 // nil if top-level
-	Children    []SituationRow // populated by ListSituationsTree
+	ID                 int64
+	Name               string
+	Slug               string
+	Description        string
+	Status             string
+	CreatedAt          string
+	UpdatedAt          string
+	ItemCount          int
+	ParentID           *int64 // nil if top-level
+	Snippet            string // Ollama-generated rolling summary
+	SnippetGeneratedAt string // RFC3339; empty if not yet generated
+	LastItemAt         string // RFC3339 of most recent linked item; populated by activity-ordered queries
+	Children           []SituationRow // populated by ListSituationsTree
 }
 
 var slugRe = regexp.MustCompile(`[^a-z0-9]+`)
@@ -116,7 +119,8 @@ func ListSituations(ctx context.Context, db *sql.DB, status string, limit int) (
 	args = append(args, limit)
 
 	rows, err := db.QueryContext(ctx, fmt.Sprintf(`
-SELECT id, name, slug, description, status, created_at, updated_at, item_count, parent_id
+SELECT id, name, slug, description, status, created_at, updated_at, item_count, parent_id,
+       COALESCE(snippet, ''), COALESCE(snippet_generated_at, '')
 FROM situations
 WHERE %s
 ORDER BY datetime(updated_at) DESC
@@ -132,7 +136,8 @@ LIMIT ?
 		var s SituationRow
 		var parentID sql.NullInt64
 		if err := rows.Scan(&s.ID, &s.Name, &s.Slug, &s.Description, &s.Status,
-			&s.CreatedAt, &s.UpdatedAt, &s.ItemCount, &parentID); err != nil {
+			&s.CreatedAt, &s.UpdatedAt, &s.ItemCount, &parentID,
+			&s.Snippet, &s.SnippetGeneratedAt); err != nil {
 			return nil, err
 		}
 		if parentID.Valid {
@@ -149,10 +154,12 @@ func GetSituation(ctx context.Context, db *sql.DB, slug string) (SituationRow, e
 	var s SituationRow
 	var parentID sql.NullInt64
 	err := db.QueryRowContext(ctx, `
-SELECT id, name, slug, description, status, created_at, updated_at, item_count, parent_id
+SELECT id, name, slug, description, status, created_at, updated_at, item_count, parent_id,
+       COALESCE(snippet, ''), COALESCE(snippet_generated_at, '')
 FROM situations WHERE slug = ?
 `, slug).Scan(&s.ID, &s.Name, &s.Slug, &s.Description, &s.Status,
-		&s.CreatedAt, &s.UpdatedAt, &s.ItemCount, &parentID)
+		&s.CreatedAt, &s.UpdatedAt, &s.ItemCount, &parentID,
+		&s.Snippet, &s.SnippetGeneratedAt)
 	if parentID.Valid {
 		pid := parentID.Int64
 		s.ParentID = &pid
@@ -169,7 +176,8 @@ func SetSituationParent(ctx context.Context, db *sql.DB, childID, parentID int64
 // ListChildSituations returns sub-situations of a parent.
 func ListChildSituations(ctx context.Context, db *sql.DB, parentID int64) ([]SituationRow, error) {
 	rows, err := db.QueryContext(ctx, `
-SELECT id, name, slug, description, status, created_at, updated_at, item_count, parent_id
+SELECT id, name, slug, description, status, created_at, updated_at, item_count, parent_id,
+       COALESCE(snippet, ''), COALESCE(snippet_generated_at, '')
 FROM situations WHERE parent_id = ?
 ORDER BY item_count DESC
 `, parentID)
@@ -183,7 +191,8 @@ ORDER BY item_count DESC
 		var s SituationRow
 		var parentID sql.NullInt64
 		if err := rows.Scan(&s.ID, &s.Name, &s.Slug, &s.Description, &s.Status,
-			&s.CreatedAt, &s.UpdatedAt, &s.ItemCount, &parentID); err != nil {
+			&s.CreatedAt, &s.UpdatedAt, &s.ItemCount, &parentID,
+			&s.Snippet, &s.SnippetGeneratedAt); err != nil {
 			return nil, err
 		}
 		if parentID.Valid {
@@ -328,7 +337,8 @@ LIMIT ?
 // GetItemSituations returns situations an item belongs to.
 func GetItemSituations(ctx context.Context, db *sql.DB, itemID int64) ([]SituationRow, error) {
 	rows, err := db.QueryContext(ctx, `
-SELECT s.id, s.name, s.slug, s.description, s.status, s.created_at, s.updated_at, s.item_count, s.parent_id
+SELECT s.id, s.name, s.slug, s.description, s.status, s.created_at, s.updated_at, s.item_count, s.parent_id,
+       COALESCE(s.snippet, ''), COALESCE(s.snippet_generated_at, '')
 FROM situations s
 JOIN situation_items si ON s.id = si.situation_id
 WHERE si.item_id = ?
@@ -344,7 +354,8 @@ ORDER BY s.item_count DESC
 		var s SituationRow
 		var parentID sql.NullInt64
 		if err := rows.Scan(&s.ID, &s.Name, &s.Slug, &s.Description, &s.Status,
-			&s.CreatedAt, &s.UpdatedAt, &s.ItemCount, &parentID); err != nil {
+			&s.CreatedAt, &s.UpdatedAt, &s.ItemCount, &parentID,
+			&s.Snippet, &s.SnippetGeneratedAt); err != nil {
 			return nil, err
 		}
 		if parentID.Valid {
@@ -354,4 +365,59 @@ ORDER BY s.item_count DESC
 		out = append(out, s)
 	}
 	return out, rows.Err()
+}
+
+// ListSituationsByActivity returns situations ordered by most recent linked item.
+// Includes a LastItemAt column per row. Inactive situations come last.
+func ListSituationsByActivity(ctx context.Context, db *sql.DB, status string, limit int) ([]SituationRow, error) {
+	if limit <= 0 {
+		limit = 30
+	}
+	where := "1=1"
+	args := make([]any, 0, 2)
+	if status != "" {
+		where += " AND s.status = ?"
+		args = append(args, status)
+	}
+	args = append(args, limit)
+
+	rows, err := db.QueryContext(ctx, fmt.Sprintf(`
+SELECT s.id, s.name, s.slug, s.description, s.status, s.created_at, s.updated_at, s.item_count, s.parent_id,
+       COALESCE(s.snippet, ''), COALESCE(s.snippet_generated_at, ''),
+       COALESCE((SELECT MAX(linked_at) FROM situation_items WHERE situation_id = s.id), s.updated_at) AS last_item_at
+FROM situations s
+WHERE %s
+ORDER BY datetime(last_item_at) DESC
+LIMIT ?
+`, where), args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []SituationRow
+	for rows.Next() {
+		var s SituationRow
+		var parentID sql.NullInt64
+		if err := rows.Scan(&s.ID, &s.Name, &s.Slug, &s.Description, &s.Status,
+			&s.CreatedAt, &s.UpdatedAt, &s.ItemCount, &parentID,
+			&s.Snippet, &s.SnippetGeneratedAt, &s.LastItemAt); err != nil {
+			return nil, err
+		}
+		if parentID.Valid {
+			pid := parentID.Int64
+			s.ParentID = &pid
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// SetSituationSnippet writes a generated snippet for a situation.
+func SetSituationSnippet(ctx context.Context, db *sql.DB, situationID int64, snippet string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := db.ExecContext(ctx, `
+UPDATE situations SET snippet = ?, snippet_generated_at = ? WHERE id = ?
+`, snippet, now, situationID)
+	return err
 }

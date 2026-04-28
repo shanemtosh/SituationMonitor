@@ -41,6 +41,9 @@
 		}
 		.theme-btn:hover { opacity: 1; }
 		.theme-btn svg { width: 16px; height: 16px; fill: currentColor; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+		.user-icon { display: flex; align-items: center; opacity: 0.5; }
+		.user-icon:hover { opacity: 1; }
+		.user-icon svg { width: 18px; height: 18px; }
 
 		/* Header */
 		h1 { font-size: 1.25rem; margin-bottom: 0.25rem; }
@@ -201,6 +204,16 @@
 			letter-spacing: 0.03em;
 		}
 		.empty { color: var(--dim); font-style: italic; font-size: 0.9rem; padding: 1rem 0; }
+		.meta-spacer { flex: 1; }
+		.save-btn {
+			background: none; border: none; cursor: pointer;
+			padding: 0; opacity: 0.3; color: inherit;
+			display: inline-flex; align-items: center;
+			margin-left: auto;
+		}
+		.save-btn:hover { opacity: 0.8; }
+		.save-btn.saved { opacity: 0.8; }
+		.save-btn svg { width: 14px; height: 14px; }
 
 		/* Refresh indicator */
 		.refresh-bar {
@@ -247,8 +260,15 @@
 	<nav>
 		<a href="/" class="active">Feed</a>
 		<a href="/daily/">Briefings</a>
-		<a href="/about">About</a>
+		<a href="/situations">Situations</a>
+		<a href="/alpha">Alpha</a>
+		{{if .User}}<a href="/saved">Saved</a>{{end}}
 		<span class="nav-spacer"></span>
+		{{if .User}}
+		<a href="/settings" class="user-icon" title="{{.User.Username}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></a>
+		{{else}}
+		<a href="/login" style="font-size:0.78rem">Sign in</a>
+		{{end}}
 		<button class="theme-btn" id="theme-toggle" title="Toggle theme"></button>
 	</nav>
 
@@ -299,6 +319,7 @@
 			<button type="submit">Apply</button>
 		</form>
 		<ul class="item-list">
+			{{$user := .User}}{{$saved := .SavedIDs}}
 			{{range .Items}}
 			<li class="item">
 				<div class="item-title"><a href="/read/{{.ID}}">{{if .TitleTrans}}{{.TitleTrans}}{{else}}{{.Title}}{{end}}</a></div>
@@ -309,6 +330,7 @@
 					{{if .Region}}<span class="region-tag">{{.Region}}</span>{{end}}
 					<span>{{.CreatedAt}}</span>
 					{{range .Tags}}<span class="tag">{{.}}</span>{{end}}
+					{{if $user}}<span class="meta-spacer"></span><button class="save-btn{{if index $saved .ID}} saved{{end}}" data-id="{{.ID}}" onclick="toggleSave(this)" title="Save"><svg viewBox="0 0 24 24" fill="{{if index $saved .ID}}currentColor{{else}}none{{end}}" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg></button>{{end}}
 				</div>
 			</li>
 			{{else}}
@@ -320,6 +342,7 @@
 	<footer class="site-footer">
 		<span>&copy; 2026 Mimir</span>
 		<span class="footer-spacer"></span>
+		<a href="/about">About</a>
 		<a href="/terms">Terms</a>
 		<a href="/privacy">Privacy</a>
 		<a href="/content-notice">Content Notice</a>
@@ -360,7 +383,7 @@
 				document.body.classList.remove('dark');
 				document.documentElement.classList.remove('light-forced');
 			}
-			themeBtn.innerHTML = isDark(mode) ? SUN : MOON;
+			themeBtn.innerHTML = isDark(mode) ? MOON : SUN;
 		}
 		applyTheme(stored);
 		themeBtn.addEventListener('click', function(){
@@ -369,6 +392,35 @@
 			stored = next;
 			applyTheme(next);
 		});
+
+		// --- Save/unsave toggle ---
+		window.toggleSave = function(btn) {
+			var id = parseInt(btn.dataset.id);
+			var saved = btn.classList.contains('saved');
+			if (saved) {
+				fetch('/actions?item_id=' + id).then(function(r){ return r.json(); }).then(function(actions){
+					var saveAction = actions.find(function(a){ return a.action === 'save'; });
+					if (saveAction) {
+						fetch('/actions/' + saveAction.id + '/delete', {method:'POST'}).then(function(){
+							btn.classList.remove('saved');
+							btn.querySelector('svg').setAttribute('fill','none');
+						});
+					}
+				});
+			} else {
+				fetch('/actions', {
+					method:'POST',
+					headers:{'Content-Type':'application/json'},
+					body: JSON.stringify({item_id: id, action: 'save'})
+				}).then(function(r){
+					if (!r.ok) throw new Error('save failed: ' + r.status);
+					return r.json();
+				}).then(function(){
+					btn.classList.add('saved');
+					btn.querySelector('svg').setAttribute('fill','currentColor');
+				});
+			}
+		};
 
 		// --- Auto-refresh feed every 5 minutes ---
 		var REFRESH_MS = 5 * 60 * 1000;

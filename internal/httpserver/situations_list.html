@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Situations — Situation Monitor</title>
+	<style>
+		:root { color-scheme: dark light; --bg: #fff; --fg: #111; --dim: #888; --border: #ddd; --item-border: #eee; --tag-bg: #eee; }
+		* { box-sizing: border-box; margin: 0; padding: 0; }
+		body {
+			font-family: system-ui, -apple-system, sans-serif;
+			line-height: 1.5;
+			padding: 1rem 1rem 4rem;
+			max-width: 720px;
+			margin: 0 auto;
+			min-height: 100dvh;
+			background: var(--bg);
+			color: var(--fg);
+		}
+		body.dark { --bg: #111; --fg: #e8e8e8; --dim: #777; --border: #333; --item-border: #222; --tag-bg: #2a2a2a; }
+		nav {
+			display: flex;
+			gap: 0.75rem;
+			align-items: center;
+			font-size: 0.85rem;
+			padding: 0.5rem 0 1rem;
+			border-bottom: 1px solid var(--border);
+			margin-bottom: 1.25rem;
+			flex-wrap: wrap;
+		}
+		nav a { text-decoration: none; color: inherit; opacity: 0.6; }
+		nav a:hover { opacity: 1; }
+		nav .active { opacity: 1; font-weight: 600; }
+		.nav-spacer { flex: 1; }
+		.theme-btn { background: none; border: none; cursor: pointer; padding: 0.25rem; opacity: 0.5; color: inherit; display: flex; align-items: center; }
+		.theme-btn:hover { opacity: 1; }
+		.theme-btn svg { width: 16px; height: 16px; fill: currentColor; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+		.user-icon { display: flex; align-items: center; opacity: 0.5; }
+		.user-icon:hover { opacity: 1; }
+
+		h1 { font-size: 1.25rem; margin-bottom: 0.25rem; }
+		.subtitle { font-size: 0.85rem; color: var(--dim); margin-bottom: 1.25rem; }
+
+		.controls { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1rem; font-size: 0.85rem; }
+		.controls label { color: var(--dim); }
+		.controls select { font-family: inherit; font-size: inherit; padding: 0.2rem 0.4rem; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; }
+
+		ul.sit-list { list-style: none; }
+		.sit-row { padding: 0.85rem 0; border-bottom: 1px solid var(--item-border); }
+		.sit-row a.sit-link { text-decoration: none; color: inherit; display: block; }
+		.sit-row a.sit-link:hover .sit-name { text-decoration: underline; }
+		.sit-name { font-weight: 600; font-size: 1rem; }
+		.sit-snippet { color: var(--fg); font-size: 0.92rem; margin-top: 0.25rem; line-height: 1.45; }
+		.sit-snippet.empty { color: var(--dim); font-style: italic; font-size: 0.85rem; }
+		.sit-meta { font-size: 0.75rem; color: var(--dim); margin-top: 0.35rem; display: flex; gap: 0.6rem; flex-wrap: wrap; }
+		.sit-meta .pill { background: var(--tag-bg); padding: 0.1rem 0.4rem; border-radius: 3px; }
+		.sit-meta .status-resolved { opacity: 0.55; }
+		.sit-meta .status-watching { color: #c80; }
+		.sit-meta .child-count { color: var(--dim); }
+
+		.empty { color: var(--dim); font-style: italic; font-size: 0.9rem; padding: 1rem 0; }
+
+		.site-footer { font-size: 0.75rem; color: var(--dim); padding-top: 1rem; margin-top: 2rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+		.site-footer a { color: var(--dim); text-decoration: none; }
+		.site-footer a:hover { color: var(--fg); }
+		.footer-spacer { flex: 1; }
+		@media (prefers-color-scheme: dark) {
+			:root:not(.light-forced) { --bg: #111; --fg: #e8e8e8; --dim: #777; --border: #333; --item-border: #222; --tag-bg: #2a2a2a; }
+		}
+	</style>
+</head>
+<body>
+	<nav>
+		<a href="/">Feed</a>
+		<a href="/daily/">Briefings</a>
+		<a href="/situations" class="active">Situations</a>
+		<a href="/alpha">Alpha</a>
+		{{if .User}}<a href="/saved">Saved</a>{{end}}
+		<span class="nav-spacer"></span>
+		{{if .User}}<a href="/settings" class="user-icon" title="{{.User.Username}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:18px;height:18px"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></a>{{else}}<a href="/login" style="font-size:0.78rem">Sign in</a>{{end}}
+		<button class="theme-btn" id="theme-toggle"></button>
+	</nav>
+
+	<h1>Tracked Situations</h1>
+	<div class="subtitle">Auto-detected from clustering related news items. Snippet refreshes hourly.</div>
+
+	<form class="controls" method="get" action="/situations">
+		<label for="sort">Sort by</label>
+		<select name="sort" id="sort" onchange="this.form.submit()">
+			<option value="activity" {{if eq .Sort "activity"}}selected{{end}}>Recent activity</option>
+			<option value="items" {{if eq .Sort "items"}}selected{{end}}>Item count</option>
+			<option value="created" {{if eq .Sort "created"}}selected{{end}}>Recently created</option>
+		</select>
+		<label for="status">Status</label>
+		<select name="status" id="status" onchange="this.form.submit()">
+			<option value="active" {{if eq .Status "active"}}selected{{end}}>Active</option>
+			<option value="watching" {{if eq .Status "watching"}}selected{{end}}>Watching</option>
+			<option value="resolved" {{if eq .Status "resolved"}}selected{{end}}>Resolved</option>
+			<option value="" {{if eq .Status ""}}selected{{end}}>All</option>
+		</select>
+	</form>
+
+	{{if .Situations}}
+	<ul class="sit-list">
+		{{range .Situations}}
+		<li class="sit-row">
+			<a href="/situations/{{.Slug}}" class="sit-link">
+				<div class="sit-name">{{.Name}}</div>
+				{{if .Snippet}}
+				<div class="sit-snippet">{{.Snippet}}</div>
+				{{else}}
+				<div class="sit-snippet empty">No snippet yet — check back after the next hourly refresh.</div>
+				{{end}}
+				<div class="sit-meta">
+					<span class="pill">{{.ItemCount}} items</span>
+					{{if .ActivityAgo}}<span>active {{.ActivityAgo}}</span>{{end}}
+					{{if ne .Status "active"}}<span class="status-{{.Status}}">{{.Status}}</span>{{end}}
+					{{if .ChildCount}}<span class="child-count">{{.ChildCount}} sub-situations</span>{{end}}
+				</div>
+			</a>
+		</li>
+		{{end}}
+	</ul>
+	{{else}}
+	<p class="empty">No situations match this filter.</p>
+	{{end}}
+
+	<div class="site-footer">
+		<span>&copy; 2026 Mimir</span>
+		<span class="footer-spacer"></span>
+		<a href="/about">About</a>
+		<a href="/terms">Terms</a>
+		<a href="/privacy">Privacy</a>
+		<a href="/content-notice">Content Notice</a>
+	</div>
+
+	<script>
+	(function(){
+		var SUN = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+		var MOON = '<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>';
+		var themeBtn = document.getElementById('theme-toggle');
+		var stored = localStorage.getItem('sm-theme');
+		function isDark(mode) { return mode === 'dark' || (!mode && window.matchMedia('(prefers-color-scheme:dark)').matches); }
+		function applyTheme(mode) {
+			if (mode === 'dark') { document.body.classList.add('dark'); document.documentElement.classList.add('light-forced'); }
+			else if (mode === 'light') { document.body.classList.remove('dark'); document.documentElement.classList.add('light-forced'); }
+			else { document.body.classList.remove('dark'); document.documentElement.classList.remove('light-forced'); }
+			themeBtn.innerHTML = isDark(mode) ? MOON : SUN;
+		}
+		applyTheme(stored);
+		themeBtn.addEventListener('click', function(){
+			var next = isDark(stored) ? 'light' : 'dark';
+			localStorage.setItem('sm-theme', next);
+			stored = next;
+			applyTheme(next);
+		});
+	})();
+	</script>
+</body>
+</html>

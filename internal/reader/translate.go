@@ -1,93 +1,41 @@
 package reader
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
-	"time"
+
+	"situationmonitor/internal/ollama"
 )
 
 // TranslateContent translates article text to the target language using Ollama.
-// Returns the translated text, or the original if already in the target language.
+// Chunks long text to fit within TranslateGemma's 2K token context window.
 func TranslateContent(ctx context.Context, ollamaURL, model, targetLang, text string) (string, error) {
 	if strings.TrimSpace(text) == "" || strings.TrimSpace(model) == "" {
 		return text, nil
 	}
 
-	// Chunk long text to fit in context window
-	chunks := chunkText(text, 4000)
+	// Chunk to ~1200 chars to stay within TranslateGemma's 2K token limit
+	// (prompt template ~200 tokens + source text + output tokens)
+	chunks := chunkText(text, 1200)
 	var translated []string
 
 	for _, chunk := range chunks {
-		result, err := translateChunk(ctx, ollamaURL, model, targetLang, chunk)
+		result, err := ollama.TranslateText(ctx, ollamaURL, model, "", targetLang, chunk)
 		if err != nil {
 			return text, err
 		}
+
+		// Hallucination guard: if the result is wildly different in length, reject it
+		ratio := float64(len(result)) / float64(len(chunk))
+		if ratio < 0.2 || ratio > 3.0 {
+			return text, fmt.Errorf("translation length ratio %.1f suggests hallucination (input=%d, output=%d)", ratio, len(chunk), len(result))
+		}
+
 		translated = append(translated, result)
 	}
 
 	return strings.Join(translated, "\n\n"), nil
-}
-
-func translateChunk(ctx context.Context, ollamaURL, model, targetLang, text string) (string, error) {
-	prompt := fmt.Sprintf(`Translate the following text to %s. Output ONLY the translated text, no explanations or markup.
-
-%s`, targetLang, text)
-
-	body, err := json.Marshal(map[string]any{
-		"model": model,
-		"messages": []map[string]string{
-			{"role": "system", "content": "You are a professional translator. Output only the translated text, preserving paragraph structure."},
-			{"role": "user", "content": prompt},
-		},
-		"stream": false,
-		"options": map[string]any{
-			"temperature": 0.1,
-			"num_ctx":     4096,
-		},
-	})
-	if err != nil {
-		return text, err
-	}
-
-	client := &http.Client{Timeout: 5 * time.Minute}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ollamaURL+"/api/chat", bytes.NewReader(body))
-	if err != nil {
-		return text, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return text, err
-	}
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	if err != nil {
-		return text, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return text, fmt.Errorf("ollama HTTP %s", resp.Status)
-	}
-
-	var parsed struct {
-		Message struct {
-			Content string `json:"content"`
-		} `json:"message"`
-	}
-	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return text, err
-	}
-
-	result := strings.TrimSpace(parsed.Message.Content)
-	if result == "" {
-		return text, nil
-	}
-	return result, nil
 }
 
 func chunkText(text string, maxChars int) []string {

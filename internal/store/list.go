@@ -26,11 +26,12 @@ type ListedItem struct {
 
 // ItemFilter limits listed items.
 type ItemFilter struct {
-	SourceKind string // empty = all
-	MinUrgency int    // 0 = no minimum
-	Hours      int    // 0 = no time cutoff (max 60 days enforced)
-	Limit      int
-	Region     string // empty = all; filters by feed_url using FeedRegionMap
+	SourceKind   string   // empty = all
+	MinUrgency   int      // 0 = no minimum
+	Hours        int      // 0 = no time cutoff (max 60 days enforced)
+	Limit        int
+	Region       string   // empty = all; filters by feed_url using FeedRegionMap
+	ExcludeFeeds []string // feed URLs to exclude (user hidden feeds)
 }
 
 // FeedRegionMap maps feed URL → region tag. Populated at startup from feeds.txt.
@@ -62,6 +63,14 @@ func ListItems(ctx context.Context, db *sql.DB, f ItemFilter) ([]ListedItem, err
 		}
 		where += " AND datetime(created_at) >= datetime('now', ?)"
 		args = append(args, fmt.Sprintf("-%d hours", h))
+	}
+	if len(f.ExcludeFeeds) > 0 {
+		placeholders := make([]string, len(f.ExcludeFeeds))
+		for i, u := range f.ExcludeFeeds {
+			placeholders[i] = "?"
+			args = append(args, u)
+		}
+		where += " AND (feed_url IS NULL OR feed_url NOT IN (" + strings.Join(placeholders, ",") + "))"
 	}
 	if f.Region != "" && FeedRegionMap != nil {
 		var urls []string

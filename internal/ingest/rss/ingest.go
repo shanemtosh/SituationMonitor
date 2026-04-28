@@ -78,29 +78,54 @@ type Config struct {
 	TranslateTarget string
 }
 
-// nonEnglishFeeds lists feed URL substrings for feeds that publish in non-English.
-var nonEnglishFeeds = []string{
-	"www3.nhk.or.jp",              // Japanese
-	"www.ansa.it",                 // Italian
-	"www.repubblica.it",           // Italian
-	"feeds.bbci.co.uk/mundo",      // Spanish (BBC Mundo)
-	"www.lanacion.com.ar",         // Spanish (Argentina)
-	"www.infobae.com",             // Spanish (Argentina/LatAm)
-	"www.eltiempo.com",            // Spanish (Colombia)
-	"www.eluniversal.com.mx",      // Spanish (Mexico)
-	"www.latercera.com",           // Spanish (Chile)
-	"efectococuyo.com",            // Spanish (Venezuela)
-	"agenciabrasil.ebc.com.br/rss", // Portuguese (Brazil)
+// feedLangMap maps feed URL substrings to their ISO 639-1 language code.
+var feedLangMap = []struct {
+	Substr string
+	Lang   string
+}{
+	{"www3.nhk.or.jp", "ja"},
+	{"www.ansa.it", "it"},
+	{"www.repubblica.it", "it"},
+	{"feeds.bbci.co.uk/mundo", "es"},
+	{"www.lanacion.com.ar", "es"},
+	{"www.infobae.com", "es"},
+	{"www.eltiempo.com", "es"},
+	{"www.eluniversal.com.mx", "es"},
+	{"www.latercera.com", "es"},
+	{"efectococuyo.com", "es"},
+	{"agenciabrasil.ebc.com.br/rss", "pt"},
+}
+
+// feedLang returns the language code for a feed URL, or "" for English feeds.
+func feedLang(feedURL string) string {
+	lower := strings.ToLower(feedURL)
+	for _, f := range feedLangMap {
+		if strings.Contains(lower, f.Substr) {
+			return f.Lang
+		}
+	}
+	return ""
 }
 
 func isNonEnglish(feedURL string) bool {
-	lower := strings.ToLower(feedURL)
-	for _, f := range nonEnglishFeeds {
-		if strings.Contains(lower, f) {
-			return true
+	return feedLang(feedURL) != ""
+}
+
+// looksNonEnglish returns true if the title contains characters uncommon in English,
+// suggesting the article is in another language (German, French, Spanish, etc.).
+// Checks for 2+ words with non-ASCII to avoid false positives on accented proper nouns.
+func looksNonEnglish(title string) bool {
+	words := strings.Fields(title)
+	accentedWords := 0
+	for _, w := range words {
+		for _, r := range w {
+			if r > 127 {
+				accentedWords++
+				break
+			}
 		}
 	}
-	return false
+	return accentedWords >= 2
 }
 
 // IngestAll fetches all feeds and upserts items. English feeds run concurrently,
@@ -217,19 +242,25 @@ func ingestOne(ctx context.Context, db *sql.DB, client *http.Client, parser *gof
 		}
 
 		// Inline translation for non-English feeds — translate if new or missing translation
+		srcLang := feedLang(feedURL)
 		if needsTranslation && cfg.OllamaModel != "" && store.ItemNeedsTranslation(ctxUpsert, db, a.ExternalID) {
-			lang, tit, sum, err := ollama.TranslateToTarget(ctxUpsert, cfg.OllamaBaseURL, cfg.OllamaModel, target, a.Title, a.Summary)
+			tit, err := ollama.TranslateText(ctxUpsert, cfg.OllamaBaseURL, cfg.OllamaModel, srcLang, target, a.Title)
 			if err != nil {
-				log.Printf("rss: translate %q: %v", truncate(a.Title, 40), err)
-				// Mark as failed so we don't retry on every poll cycle
+				log.Printf("rss: translate title %q: %v", truncate(a.Title, 40), err)
 				a.Lang = "fail"
 				a.TranslatorModel = "error"
 			} else if strings.EqualFold(strings.TrimSpace(tit), strings.TrimSpace(a.Title)) {
 				log.Printf("rss: translate pass-through: %q", truncate(a.Title, 40))
-				// Pass-through detected — don't store bad translation
 			} else {
-				if lang == "" {
-					lang = "und"
+				// Translate summary (truncate to ~1500 chars to fit TranslateGemma's 2K context)
+				sumText := a.Summary
+				if len(sumText) > 1500 {
+					sumText = sumText[:1500] + "…"
+				}
+				sum, sumErr := ollama.TranslateText(ctxUpsert, cfg.OllamaBaseURL, cfg.OllamaModel, srcLang, target, sumText)
+				if sumErr != nil {
+					log.Printf("rss: translate summary %q: %v", truncate(a.Title, 40), sumErr)
+					sum = a.Summary
 				}
 				if tit == "" {
 					tit = a.Title
@@ -237,21 +268,51 @@ func ingestOne(ctx context.Context, db *sql.DB, client *http.Client, parser *gof
 				if sum == "" {
 					sum = a.Summary
 				}
-				a.Lang = lang
+				a.Lang = srcLang
 				a.TitleTranslated = tit
 				a.SummaryTranslated = sum
 				a.TranslatorModel = cfg.OllamaModel
 			}
 		} else if !needsTranslation && !store.ItemExists(ctxUpsert, db, a.ExternalID) {
-			// Mark English feeds as English so they're not picked up by any translate backfill
-			a.Lang = "en"
-			a.TitleTranslated = a.Title
-			a.SummaryTranslated = a.Summary
-			a.TranslatorModel = "skip"
+			// Check if this "English" feed item is actually in another language
+			// (e.g., Politico EU occasionally publishes in German/French)
+			if cfg.OllamaModel != "" && looksNonEnglish(a.Title) {
+				tit, err := ollama.TranslateText(ctxUpsert, cfg.OllamaBaseURL, cfg.OllamaModel, "", target, a.Title)
+				if err != nil {
+					log.Printf("rss: auto-translate %q: %v", truncate(a.Title, 40), err)
+					a.Lang = "en"
+					a.TitleTranslated = a.Title
+					a.SummaryTranslated = a.Summary
+					a.TranslatorModel = "skip"
+				} else {
+					sumText := a.Summary
+					if len(sumText) > 1500 {
+						sumText = sumText[:1500] + "…"
+					}
+					sum, sumErr := ollama.TranslateText(ctxUpsert, cfg.OllamaBaseURL, cfg.OllamaModel, "", target, sumText)
+					if sumErr != nil {
+						sum = a.Summary
+					}
+					a.Lang = "auto"
+					a.TitleTranslated = tit
+					a.SummaryTranslated = sum
+					a.TranslatorModel = cfg.OllamaModel
+					log.Printf("rss: auto-translated non-English item on English feed: %q", truncate(a.Title, 40))
+				}
+			} else {
+				// Mark English feeds as English
+				a.Lang = "en"
+				a.TitleTranslated = a.Title
+				a.SummaryTranslated = a.Summary
+				a.TranslatorModel = "skip"
+			}
 		}
 
-		// Drop items that look like lifestyle/promo content based on translated title
+		// Drop items that look like lifestyle/promo content
 		if a.TitleTranslated != "" && isLowQualityItem(a.TitleTranslated) {
+			continue
+		}
+		if a.URL != "" && isLowQualityURL(a.URL) {
 			continue
 		}
 
@@ -292,11 +353,34 @@ var lowQualityPatterns = []string{
 	"food festival",
 	"celebrity wedding",
 	"reality show",
+	"what to read for free",
+	"what to watch",
+	"what to stream",
+}
+
+// lowQualityURLPatterns filters articles by URL path segments that indicate
+// lifestyle/culture content that leaked into news feeds.
+var lowQualityURLPatterns = []string{
+	"/cultura/",
+	"/entretenimiento/",
+	"/espectaculos/",
+	"/deportes/",
+	"/lifestyle/",
 }
 
 func isLowQualityItem(translatedTitle string) bool {
 	lower := strings.ToLower(translatedTitle)
 	for _, p := range lowQualityPatterns {
+		if strings.Contains(lower, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func isLowQualityURL(articleURL string) bool {
+	lower := strings.ToLower(articleURL)
+	for _, p := range lowQualityURLPatterns {
 		if strings.Contains(lower, p) {
 			return true
 		}

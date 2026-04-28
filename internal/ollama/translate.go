@@ -11,33 +11,68 @@ import (
 	"time"
 )
 
-// TranslateToTarget asks the local model for JSON: {lang, title, summary} in the target language (usually English).
-func TranslateToTarget(ctx context.Context, baseURL, model, targetLang, title, summary string) (lang, titleOut, summaryOut string, err error) {
+// langNames maps ISO 639-1 codes to full language names for TranslateGemma prompts.
+var langNames = map[string]string{
+	"ja": "Japanese",
+	"zh": "Chinese",
+	"ko": "Korean",
+	"es": "Spanish",
+	"pt": "Portuguese",
+	"it": "Italian",
+	"fr": "French",
+	"de": "German",
+	"ar": "Arabic",
+	"ru": "Russian",
+}
+
+// TranslateText translates a single text string from sourceLang to targetLang
+// using TranslateGemma's recommended prompt format.
+func TranslateText(ctx context.Context, baseURL, model, sourceLang, targetLang, text string) (string, error) {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" || strings.TrimSpace(model) == "" {
-		return "", "", "", fmt.Errorf("ollama: missing base URL or model")
+		return text, fmt.Errorf("ollama: missing base URL or model")
 	}
-	sum := strings.TrimSpace(summary)
-	if len(sum) > 6000 {
-		sum = sum[:6000] + "…"
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return "", nil
 	}
-	user := fmt.Sprintf(`Translate to %s.
 
-Title: %s
-Summary: %s
+	srcName := langNames[sourceLang]
+	if srcName == "" && sourceLang != "" {
+		srcName = sourceLang
+	}
+	tgtName := targetLang
+	tgtCode := "en"
+	if strings.EqualFold(targetLang, "English") {
+		tgtCode = "en"
+	}
 
-Reply with ONLY this JSON:
-{"lang":"xx","title":"English title","summary":"English summary"}
-
-lang = detected source language code (ja, zh, ko, etc).
-title and summary MUST be in %s.`,
-		targetLang, strings.TrimSpace(title), sum, targetLang)
+	// TranslateGemma recommended prompt format
+	var prompt string
+	if srcName != "" && sourceLang != "" {
+		prompt = fmt.Sprintf(
+			"You are a professional %s (%s) to %s (%s) translator. "+
+				"Your goal is to accurately convey the meaning and nuances of the original %s text "+
+				"while adhering to %s grammar, vocabulary, and cultural sensitivities. "+
+				"Produce only the %s translation, without any additional explanations or commentary. "+
+				"Please translate the following %s text into %s:\n\n\n%s",
+			srcName, sourceLang, tgtName, tgtCode,
+			srcName, tgtName, tgtName, srcName, tgtName,
+			text,
+		)
+	} else {
+		// Source language unknown — simpler prompt
+		prompt = fmt.Sprintf(
+			"Translate the following text into %s (%s). "+
+				"Produce only the %s translation, without any additional explanations or commentary.\n\n\n%s",
+			tgtName, tgtCode, tgtName, text,
+		)
+	}
 
 	body, err := json.Marshal(map[string]any{
 		"model": model,
 		"messages": []map[string]string{
-			{"role": "system", "content": "You are a careful news translator. Output valid JSON only, no markdown."},
-			{"role": "user", "content": user},
+			{"role": "user", "content": prompt},
 		},
 		"stream": false,
 		"options": map[string]any{
@@ -46,27 +81,27 @@ title and summary MUST be in %s.`,
 		},
 	})
 	if err != nil {
-		return "", "", "", err
+		return text, err
 	}
 
 	client := &http.Client{Timeout: 5 * time.Minute}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/chat", bytes.NewReader(body))
 	if err != nil {
-		return "", "", "", err
+		return text, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", "", "", err
+		return text, err
 	}
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
-		return "", "", "", err
+		return text, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", "", "", fmt.Errorf("ollama HTTP %s: %s", resp.Status, string(raw))
+		return text, fmt.Errorf("ollama HTTP %s: %s", resp.Status, string(raw))
 	}
 
 	var parsed struct {
@@ -75,47 +110,11 @@ title and summary MUST be in %s.`,
 		} `json:"message"`
 	}
 	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return "", "", "", fmt.Errorf("ollama decode: %w", err)
+		return text, fmt.Errorf("ollama decode: %w", err)
 	}
-	content := strings.TrimSpace(parsed.Message.Content)
-	type out struct {
-		Lang    string `json:"lang"`
-		Title   string `json:"title"`
-		Summary string `json:"summary"`
+	result := strings.TrimSpace(parsed.Message.Content)
+	if result == "" {
+		return text, nil
 	}
-	obj := extractJSONObject(content)
-	var o out
-	if err := json.Unmarshal([]byte(obj), &o); err != nil {
-		return "", "", "", fmt.Errorf("ollama json: %w", err)
-	}
-	return strings.TrimSpace(o.Lang), strings.TrimSpace(o.Title), strings.TrimSpace(o.Summary), nil
-}
-
-func extractJSONObject(s string) string {
-	s = strings.TrimSpace(s)
-	if strings.HasPrefix(s, "```") {
-		s = strings.TrimPrefix(s, "```")
-		s = strings.TrimPrefix(s, "json")
-		s = strings.TrimSpace(s)
-		if i := strings.LastIndex(s, "```"); i >= 0 {
-			s = strings.TrimSpace(s[:i])
-		}
-	}
-	start := strings.IndexByte(s, '{')
-	if start < 0 {
-		return s
-	}
-	depth := 0
-	for i := start; i < len(s); i++ {
-		switch s[i] {
-		case '{':
-			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				return s[start : i+1]
-			}
-		}
-	}
-	return strings.TrimSpace(s[start:])
+	return result, nil
 }
