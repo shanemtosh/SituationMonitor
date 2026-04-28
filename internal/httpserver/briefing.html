@@ -137,6 +137,26 @@
 			height: 36px;
 		}
 
+		.jump-bar {
+			display: flex; gap: 0.5rem; flex-wrap: wrap;
+			font-size: 0.78rem; margin: -0.75rem 0 1.5rem;
+		}
+		.jump-bar a {
+			text-decoration: none; color: var(--dim);
+			padding: 0.25rem 0.55rem; border: 1px solid var(--border); border-radius: 3px;
+		}
+		.jump-bar a:hover { color: var(--fg); border-color: var(--dim); }
+		.update-section {
+			margin: 2rem 0 0.5rem;
+			padding-top: 1.25rem;
+			border-top: 2px solid var(--exec-border, #c44);
+		}
+		.update-section h2 { font-size: 1.05rem; color: var(--fg); text-transform: none; letter-spacing: 0; margin-bottom: 0.25rem; }
+		.update-section .when { font-size: 0.72rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.85rem; }
+		.update-section .headline { font-weight: 600; font-size: 0.95rem; margin-bottom: 1rem; }
+		.update-section article { margin-bottom: 1rem; }
+		.update-section article h3 { font-size: 0.95rem; margin-bottom: 0.3rem; }
+
 		@media (prefers-color-scheme: dark) {
 			:root:not(.light-forced) { --bg: #111; --fg: #e8e8e8; --dim: #777; --dim2: #9aa; --border: #333; --exec-bg: #1a1111; --exec-border: #c44; --link: #6af; }
 		}
@@ -166,6 +186,13 @@
 		<audio controls preload="none" src="{{.AudioURL}}">
 			Your browser does not support audio playback.
 		</audio>
+	</div>
+	{{end}}
+
+	{{if .Updates}}
+	<div class="jump-bar">
+		<span style="opacity:0.6">New today:</span>
+		{{range .Updates}}<a href="#{{.Slot}}">{{.SlotLabel}}</a>{{end}}
 	</div>
 	{{end}}
 
@@ -245,6 +272,31 @@
 			<li><a href="{{.URL}}">{{.Name}} — {{.Title}}</a></li>
 			{{end}}
 		</ol>
+	</section>
+	{{end}}
+
+	{{range .Updates}}
+	<section id="{{.Slot}}" class="update-section">
+		<h2>{{.SlotLabel}}</h2>
+		<div class="when">{{.GeneratedAt}}</div>
+		{{if .AudioURL}}
+		<div class="audio-player">
+			<div class="audio-label">Listen to {{.SlotLabel}}</div>
+			<audio controls preload="none" src="{{.AudioURL}}">
+				Your browser does not support audio playback.
+			</audio>
+		</div>
+		{{end}}
+		{{if .Headline}}<div class="headline">{{.Headline}}</div>{{end}}
+		{{range .Stories}}
+		<article>
+			{{if .Title}}<h3>{{if .Urgency}}<span class="urgency u{{.Urgency}}">{{.UrgencyLabel}}</span> {{end}}{{.Title}}</h3>{{end}}
+			{{if .Body}}<p>{{.Body}}</p>{{end}}
+			{{if .Body2}}<p>{{.Body2}}</p>{{end}}
+			{{if .Why}}<p class="why">Why it matters: {{.Why}}</p>{{end}}
+			{{if .Sources}}{{range $i, $s := .Sources}}{{if $i}} · {{end}}<a class="source-link" href="{{$s.URL}}">{{$s.Name}}</a>{{end}}{{end}}
+		</article>
+		{{end}}
 	</section>
 	{{end}}
 

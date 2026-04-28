@@ -25,6 +25,38 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 PAGES_DIR = REPO_ROOT / "data" / "pages"
 
 
+def update_to_script(data: dict, slot: str) -> str:
+    """Convert one update slot (midday/evening) into a spoken script."""
+    updates = data.get("updates") or []
+    entry = next((u for u in updates if u.get("slot") == slot), None)
+    if not entry:
+        return ""
+    date = data.get("date", "")
+    weekday = data.get("weekday", "")
+    label = "Midday update" if slot == "midday" else "Evening update"
+
+    parts = [f"Situation Monitor {label} for {weekday}, {format_date(date)}.", ""]
+    headline = clean(entry.get("headline", ""))
+    if headline:
+        parts.append(headline)
+        parts.append("")
+
+    stories = entry.get("stories") or []
+    for i, story in enumerate(stories, 1):
+        title = clean(story.get("title", ""))
+        parts.append(f"Story {i}. {title}.")
+        body = clean(story.get("body", ""))
+        if body:
+            parts.append(body)
+        why = clean(story.get("why", ""))
+        if why:
+            parts.append(f"Here is why it matters. {why}")
+        parts.append("")
+
+    parts.append(f"End of {label.lower()}.")
+    return "\n".join(parts)
+
+
 def yaml_to_script(data: dict) -> str:
     """Convert a briefing YAML dict into a natural spoken script."""
     parts = []
@@ -166,9 +198,13 @@ def generate_audio(script: str, output_path: Path, voice: str = "af_heart"):
     return True
 
 
-def process_file(yaml_path: Path, output_path: Path | None, voice: str):
-    """Process a single YAML file into an audio briefing."""
-    print(f"Processing {yaml_path.name}...")
+def process_file(yaml_path: Path, output_path: Path | None, voice: str, slot: str | None = None):
+    """Process a single YAML file into an audio briefing.
+
+    If slot is set, render only that update slot ("midday" / "evening") and
+    write to <stem>-<slot>.mp3 next to the YAML.
+    """
+    print(f"Processing {yaml_path.name}{' slot=' + slot if slot else ''}...")
 
     with open(yaml_path) as f:
         data = yaml.safe_load(f)
@@ -177,13 +213,20 @@ def process_file(yaml_path: Path, output_path: Path | None, voice: str):
         print(f"  Skipping: empty YAML")
         return False
 
-    script = yaml_to_script(data)
+    if slot:
+        script = update_to_script(data, slot)
+        if not script:
+            print(f"  Skipping: no '{slot}' update entry in YAML")
+            return False
+        if output_path is None:
+            output_path = yaml_path.with_name(f"{yaml_path.stem}-{slot}.mp3")
+        script_path = yaml_path.with_name(f"{yaml_path.stem}-{slot}.txt")
+    else:
+        script = yaml_to_script(data)
+        if output_path is None:
+            output_path = yaml_path.with_suffix(".mp3")
+        script_path = yaml_path.with_suffix(".txt")
 
-    if output_path is None:
-        output_path = yaml_path.with_suffix(".mp3")
-
-    # Save the script text too for reference
-    script_path = yaml_path.with_suffix(".txt")
     script_path.write_text(script)
     print(f"  Script: {script_path} ({len(script)} chars)")
 
@@ -198,6 +241,8 @@ def main():
     parser.add_argument("--all", action="store_true", help="Process all YAML files missing MP3s")
     parser.add_argument("--force", action="store_true", help="Regenerate even if MP3 exists")
     parser.add_argument("--script-only", action="store_true", help="Only generate text scripts, no audio")
+    parser.add_argument("--slot", choices=["midday", "evening"],
+                        help="Render only the given update slot (writes <stem>-<slot>.mp3)")
     args = parser.parse_args()
 
     if args.all:
@@ -223,7 +268,7 @@ def main():
     elif args.yaml_file:
         yp = Path(args.yaml_file)
         out = Path(args.output) if args.output else None
-        process_file(yp, out, args.voice)
+        process_file(yp, out, args.voice, slot=args.slot)
     else:
         parser.print_help()
 

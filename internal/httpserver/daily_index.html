@@ -51,6 +51,7 @@
 		}
 		li a:hover { opacity: 0.7; }
 		.empty { color: var(--dim); font-style: italic; font-size: 0.9rem; padding: 1rem 0; }
+		.slot-mark { font-size: 0.7rem; font-weight: 500; color: var(--dim); margin-left: 0.4rem; padding: 0.05rem 0.35rem; border: 1px solid var(--border); border-radius: 3px; vertical-align: middle; letter-spacing: 0.04em; }
 		.site-footer {
 			font-size: 0.75rem;
 			color: var(--dim);
@@ -85,7 +86,7 @@
 	<h1>Daily Briefings</h1>
 	{{if .Entries}}
 	<ul>
-		{{range .Entries}}<li><a href="{{.URL}}">{{.Date}}</a></li>{{end}}
+		{{range .Entries}}<li><a href="{{.URL}}">{{.Date}}{{if .HasMidday}}<span class="slot-mark">+M</span>{{end}}{{if .HasEvening}}<span class="slot-mark">+E</span>{{end}}</a></li>{{end}}
 	</ul>
 	{{else}}
 	<p class="empty">No briefings generated yet.</p>

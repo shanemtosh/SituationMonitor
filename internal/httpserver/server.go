@@ -67,6 +67,8 @@ func Mount(mux *http.ServeMux, db *sql.DB, pagesDir string, rc ReaderConfig) htt
 	mux.HandleFunc("GET /daily/{date}", handleDailyPage(pagesDir))
 	mux.HandleFunc("GET /api/daily/{date}", handleDailyYAML(pagesDir))
 	mux.HandleFunc("GET /daily/{date}/audio", handleDailyAudio(pagesDir))
+	mux.HandleFunc("GET /daily/{date}/{slot}/audio", handleDailyUpdateAudio(pagesDir))
+	mux.HandleFunc("GET /api/daily/{date}/slots", handleDailySlots(pagesDir))
 	mux.HandleFunc("GET /about", handleAbout())
 	mux.HandleFunc("GET /terms", handleLegalPage("Terms of Use", termsBody))
 	mux.HandleFunc("GET /privacy", handleLegalPage("Privacy Policy", privacyBody))
@@ -521,6 +523,27 @@ type briefingWatch struct {
 	Body  string `yaml:"body"`
 }
 
+type briefingUpdate struct {
+	Slot        string          `yaml:"slot"`         // "midday" | "evening"
+	GeneratedAt string          `yaml:"generated_at"` // RFC3339 UTC
+	Headline    string          `yaml:"headline"`
+	Stories     []briefingStory `yaml:"stories"`
+	Audio       string          `yaml:"audio"`       // mp3 filename, set by audio post-step
+	AudioURL    string          `yaml:"-"`           // populated by handler when mp3 exists
+}
+
+// SlotLabel returns the display label for the update slot.
+func (u briefingUpdate) SlotLabel() string {
+	switch u.Slot {
+	case "midday":
+		return "Midday Update"
+	case "evening":
+		return "Evening Update"
+	default:
+		return "Update"
+	}
+}
+
 type briefingData struct {
 	Date       string           `yaml:"date"`
 	Weekday    string           `yaml:"weekday"`
@@ -531,6 +554,7 @@ type briefingData struct {
 	Social     string           `yaml:"social"`
 	Watchlist  []briefingWatch  `yaml:"watchlist"`
 	AllSources []briefingSource `yaml:"all_sources"`
+	Updates    []briefingUpdate `yaml:"updates,omitempty"`
 	User       *store.User      `yaml:"-"`
 	AudioURL   string           `yaml:"-"`
 }
@@ -569,6 +593,16 @@ func handleDailyPage(pagesDir string) http.HandlerFunc {
 		if _, err := os.Stat(mp3Path); err == nil {
 			b.AudioURL = fmt.Sprintf("/daily/%s/audio", date)
 		}
+		// Per-slot audio for midday/evening updates
+		for i, u := range b.Updates {
+			if u.Slot == "" {
+				continue
+			}
+			slotMP3 := filepath.Join(pagesDir, fmt.Sprintf("%s-%s.mp3", date, u.Slot))
+			if _, err := os.Stat(slotMP3); err == nil {
+				b.Updates[i].AudioURL = fmt.Sprintf("/daily/%s/%s/audio", date, u.Slot)
+			}
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = briefingTmpl.Execute(w, b)
 	}
@@ -588,6 +622,49 @@ func handleDailyYAML(pagesDir string) http.HandlerFunc {
 		}
 		w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
 		w.Write(raw)
+	}
+}
+
+// handleDailySlots reports whether a date's briefing exists and which update
+// slots are present. Used by the dashboard to label today's briefing link.
+func handleDailySlots(pagesDir string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		date := r.PathValue("date")
+		if !dateRe.MatchString(date) {
+			http.NotFound(w, r)
+			return
+		}
+		path := filepath.Join(pagesDir, date+".yaml")
+		exists := false
+		var midday, evening bool
+		if _, err := os.Stat(path); err == nil {
+			exists = true
+			midday, evening = detectUpdateSlots(path)
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(map[string]bool{
+			"exists":  exists,
+			"midday":  midday,
+			"evening": evening,
+		})
+	}
+}
+
+func handleDailyUpdateAudio(pagesDir string) http.HandlerFunc {
+	allowedSlots := map[string]bool{"midday": true, "evening": true}
+	return func(w http.ResponseWriter, r *http.Request) {
+		date := r.PathValue("date")
+		slot := r.PathValue("slot")
+		if !dateRe.MatchString(date) || !allowedSlots[slot] {
+			http.NotFound(w, r)
+			return
+		}
+		mp3Path := filepath.Join(pagesDir, fmt.Sprintf("%s-%s.mp3", date, slot))
+		if _, err := os.Stat(mp3Path); err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		http.ServeFile(w, r, mp3Path)
 	}
 }
 
@@ -613,8 +690,28 @@ type dailyIndexData struct {
 	Entries []dailyEntry
 }
 type dailyEntry struct {
-	Date string
-	URL  string
+	Date      string
+	URL       string
+	HasMidday bool
+	HasEvening bool
+}
+
+// detectUpdateSlots scans a YAML briefing file for midday/evening update slots
+// without doing a full parse. Used by the index to render +M/+E markers cheaply.
+func detectUpdateSlots(path string) (midday, evening bool) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return false, false
+	}
+	s := string(raw)
+	// Only look at the file once we hit the updates: section to avoid
+	// matching unrelated occurrences of "slot: midday" embedded in a story body.
+	idx := strings.Index(s, "\nupdates:")
+	if idx < 0 {
+		return false, false
+	}
+	tail := s[idx:]
+	return strings.Contains(tail, "slot: midday"), strings.Contains(tail, "slot: evening")
 }
 
 func handleDailyIndex(pagesDir string) http.HandlerFunc {
@@ -630,7 +727,13 @@ func handleDailyIndex(pagesDir string) http.HandlerFunc {
 			if strings.HasSuffix(name, ".yaml") {
 				date := strings.TrimSuffix(name, ".yaml")
 				if dateRe.MatchString(date) {
-					list = append(list, dailyEntry{Date: date, URL: fmt.Sprintf("/daily/%s", date)})
+					midday, evening := detectUpdateSlots(filepath.Join(pagesDir, name))
+					list = append(list, dailyEntry{
+						Date:       date,
+						URL:        fmt.Sprintf("/daily/%s", date),
+						HasMidday:  midday,
+						HasEvening: evening,
+					})
 				}
 			}
 		}

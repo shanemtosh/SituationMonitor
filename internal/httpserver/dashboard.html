@@ -350,17 +350,24 @@
 
 	<script>
 	(function(){
-		// --- Today's briefing link (check if it exists) ---
+		// --- Today's briefing link (check if it exists, label any updates) ---
 		var d = new Date();
 		var dateStr = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 		var briefingUrl = '/daily/' + dateStr;
 		var link = document.getElementById('today-briefing');
 		link.href = briefingUrl;
 		link.textContent = 'Briefing — ' + dateStr;
-		fetch(briefingUrl, {method:'HEAD'}).then(function(r){
-			if(!r.ok) {
+		fetch('/api/daily/' + dateStr + '/slots').then(function(r){ return r.json(); }).then(function(s){
+			if (!s || !s.exists) {
 				link.textContent = 'No briefing yet today';
 				link.classList.add('unavailable');
+				return;
+			}
+			var marks = [];
+			if (s.midday) marks.push('midday');
+			if (s.evening) marks.push('evening');
+			if (marks.length) {
+				link.textContent = 'Briefing — ' + dateStr + ' · +' + marks.join(' +');
 			}
 		}).catch(function(){});
 
