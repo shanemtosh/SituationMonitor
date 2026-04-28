@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Week {{.Week}} — Alpha Digest</title>
+	<style>
+		:root { color-scheme: dark light; --bg: #fff; --fg: #111; --dim: #888; --border: #ddd; --item-border: #eee; --tag-bg: #eee; --code-bg: #f5f5f5; }
+		* { box-sizing: border-box; margin: 0; padding: 0; }
+		body {
+			font-family: system-ui, -apple-system, sans-serif;
+			line-height: 1.55;
+			padding: 1rem 1rem 4rem;
+			max-width: 760px;
+			margin: 0 auto;
+			min-height: 100dvh;
+			background: var(--bg);
+			color: var(--fg);
+		}
+		body.dark { --bg: #111; --fg: #e8e8e8; --dim: #777; --border: #333; --item-border: #222; --tag-bg: #2a2a2a; --code-bg: #1a1a1a; }
+		nav {
+			display: flex; gap: 0.75rem; align-items: center;
+			font-size: 0.85rem; padding: 0.5rem 0 1rem;
+			border-bottom: 1px solid var(--border); margin-bottom: 1.25rem; flex-wrap: wrap;
+		}
+		nav a { text-decoration: none; color: inherit; opacity: 0.6; }
+		nav a:hover { opacity: 1; }
+		nav .active { opacity: 1; font-weight: 600; }
+		.nav-spacer { flex: 1; }
+		.theme-btn { background: none; border: none; cursor: pointer; padding: 0.25rem; opacity: 0.5; color: inherit; display: flex; align-items: center; }
+		.theme-btn:hover { opacity: 1; }
+		.theme-btn svg { width: 16px; height: 16px; fill: currentColor; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+		.user-icon { display: flex; align-items: center; opacity: 0.5; }
+
+		.crumb { font-size: 0.8rem; color: var(--dim); margin-bottom: 0.5rem; }
+		.crumb a { color: var(--dim); text-decoration: none; }
+		.crumb a:hover { color: var(--fg); }
+		h1 { font-size: 1.4rem; margin-bottom: 1.5rem; }
+
+		.section-list { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; font-size: 0.8rem; }
+		.section-list a { text-decoration: none; color: var(--dim); padding: 0.25rem 0.55rem; border: 1px solid var(--border); border-radius: 3px; }
+		.section-list a:hover { color: var(--fg); border-color: var(--dim); }
+
+		.domain-section { margin-bottom: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+		.domain-section h2 { font-size: 1.05rem; margin-bottom: 0.75rem; }
+		.domain-content h1 { font-size: 1rem; font-weight: 600; margin: 0 0 0.5rem; }
+		.domain-content h2 { font-size: 0.92rem; font-weight: 600; text-transform: none; letter-spacing: 0; margin: 1.25rem 0 0.4rem; color: var(--fg); }
+		.domain-content h3 { font-size: 0.88rem; font-weight: 600; margin: 1rem 0 0.3rem; }
+		.domain-content p { margin-bottom: 0.7rem; font-size: 0.92rem; }
+		.domain-content ul, .domain-content ol { padding-left: 1.4rem; margin-bottom: 0.7rem; font-size: 0.92rem; }
+		.domain-content li { margin-bottom: 0.25rem; }
+		.domain-content em { color: var(--dim); font-style: italic; }
+		.domain-content code { background: var(--code-bg); padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.85em; }
+		.domain-content pre { background: var(--code-bg); padding: 0.5rem 0.7rem; border-radius: 4px; overflow-x: auto; margin-bottom: 0.7rem; }
+		.domain-content pre code { background: none; padding: 0; }
+
+		.site-footer { font-size: 0.75rem; color: var(--dim); padding-top: 1rem; margin-top: 2rem; border-top: 1px solid var(--border); display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+		.site-footer a { color: var(--dim); text-decoration: none; }
+		.site-footer a:hover { color: var(--fg); }
+		.footer-spacer { flex: 1; }
+		@media (prefers-color-scheme: dark) {
+			:root:not(.light-forced) { --bg: #111; --fg: #e8e8e8; --dim: #777; --border: #333; --item-border: #222; --tag-bg: #2a2a2a; --code-bg: #1a1a1a; }
+		}
+	</style>
+</head>
+<body>
+	<nav>
+		<a href="/">Feed</a>
+		<a href="/daily/">Briefings</a>
+		<a href="/situations">Situations</a>
+		<a href="/alpha">Alpha</a>
+		<a href="/alpha/digests" class="active">Digests</a>
+		{{if .User}}<a href="/saved">Saved</a>{{end}}
+		<span class="nav-spacer"></span>
+		{{if .User}}<a href="/settings" class="user-icon" title="{{.User.Username}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:18px;height:18px"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></a>{{else}}<a href="/login" style="font-size:0.78rem">Sign in</a>{{end}}
+		<button class="theme-btn" id="theme-toggle"></button>
+	</nav>
+
+	<div class="crumb">
+		<a href="/alpha/digests">Digests</a>
+	</div>
+	<h1>Week {{.Week}}</h1>
+
+	{{if gt (len .Sections) 1}}
+	<div class="section-list">
+		<span style="color:var(--dim);align-self:center">Jump to:</span>
+		{{range .Sections}}<a href="#{{.Domain}}">{{.Label}}</a>{{end}}
+	</div>
+	{{end}}
+
+	{{range .Sections}}
+	<section id="{{.Domain}}" class="domain-section">
+		<h2>{{.Label}}</h2>
+		<div class="domain-content">{{.BodyHTML}}</div>
+	</section>
+	{{end}}
+
+	<div class="site-footer">
+		<span>&copy; 2026 Mimir</span>
+		<span class="footer-spacer"></span>
+		<a href="/about">About</a>
+		<a href="/terms">Terms</a>
+		<a href="/privacy">Privacy</a>
+		<a href="/content-notice">Content Notice</a>
+	</div>
+
+	<script>
+	(function(){
+		var SUN = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+		var MOON = '<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/></svg>';
+		var themeBtn = document.getElementById('theme-toggle');
+		var stored = localStorage.getItem('sm-theme');
+		function isDark(mode) { return mode === 'dark' || (!mode && window.matchMedia('(prefers-color-scheme:dark)').matches); }
+		function applyTheme(mode) {
+			if (mode === 'dark') { document.body.classList.add('dark'); document.documentElement.classList.add('light-forced'); }
+			else if (mode === 'light') { document.body.classList.remove('dark'); document.documentElement.classList.add('light-forced'); }
+			else { document.body.classList.remove('dark'); document.documentElement.classList.remove('light-forced'); }
+			themeBtn.innerHTML = isDark(mode) ? MOON : SUN;
+		}
+		applyTheme(stored);
+		themeBtn.addEventListener('click', function(){
+			var next = isDark(stored) ? 'light' : 'dark';
+			localStorage.setItem('sm-theme', next);
+			stored = next;
+			applyTheme(next);
+		});
+	})();
+	</script>
+</body>
+</html>

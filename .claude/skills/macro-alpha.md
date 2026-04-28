@@ -6,6 +6,23 @@ Perform constraint-based macroeconomic and monetary policy analysis. Forecast ce
 
 Invoked via `/macro-alpha`. Run when major economic data releases, central bank meetings, or fiscal policy events occur.
 
+## Weekly mode
+
+When invoked as part of the weekly combined run with no specific event trigger, the default behavior is:
+
+1. Scan all active situations and assessments in this domain for material changes since the last weekly run.
+2. Compare against last week's digest at `data/alpha/digests/{prev_week}/macro.md` if present — what was forecast, what is still relevant, what shifted.
+3. Update assessments where evidence has moved the probability or weakened a fulcrum constraint.
+4. Create new assessments only for situations that cross the threshold for needing one.
+5. Perform Step C: stale cleanup.
+6. Write this week's digest (Step D).
+
+Prefer updating over creating. If nothing material changed in macro this week, the digest can be short and sections can be `_None._`.
+
+## Smoke-test mode
+
+If the environment variable `SMOKE_TEST=1` is set, log every API call and file write you would make but do NOT actually POST or write.
+
 ## Core Framework
 
 **Papic's thesis applied to macro:** Central banks and fiscal policymakers say what they *want* to do (preferences — forward guidance, policy targets), but material constraints determine what they *actually do*. When inflation is sticky, the Fed *cannot* cut regardless of what markets want. When debt service costs hit fiscal limits, governments *cannot* spend regardless of promises.
@@ -124,6 +141,41 @@ curl -s -X POST http://localhost:8080/api/calendar -d '{
 
 Calendar event types: `fomc`, `data_release`, `testimony`, `fiscal_deadline`, `other`
 Region values: `fed`, `ecb`, `boj`, `boe`, `fiscal`, `labor`
+
+### Step C: Stale assessment cleanup (weekly mode)
+
+```bash
+curl -s "http://localhost:8080/api/assessments?domain=macro&status=active" > /tmp/macro_active.json
+```
+
+Mark as resolved any active assessment where:
+- Underlying situation has `status: resolved`.
+- Most recent `probability_update` is older than 60 days AND no related items in the last 30 days.
+- The macro context that motivated the assessment has materially shifted (e.g. the FOMC decision it forecast already happened).
+
+```bash
+curl -s -X PUT http://localhost:8080/api/assessments/{ID} -d '{
+  "status": "resolved",
+  "summary": "Resolved during weekly cleanup — situation has wound down."
+}'
+```
+
+Delete `status: passed` calendar events older than 90 days. Be conservative.
+
+### Step D: Weekly digest (weekly mode)
+
+Write a markdown digest to `data/alpha/digests/YYYY-Www/macro.md`. Use the same schema as the geopolitical digest — see `.claude/skills/geopolitical-alpha.md` Step D for the canonical structure. Empty sections write `_None._`, never omit a heading.
+
+```bash
+WEEK=$(date +%G-W%V)
+DIGEST_DIR="/home/shane/Code/SituationMonitor/data/alpha/digests/$WEEK"
+mkdir -p "$DIGEST_DIR"
+DIGEST_FILE="$DIGEST_DIR/macro.md"
+```
+
+## Writing style
+
+Same as the morning briefing — see `.claude/skills/daily-briefing.md` Step 5 for the full banned-pattern list. Intelligence-briefing tone, data-forward, source-attributed, no AI tells.
 
 ## Tools needed
 

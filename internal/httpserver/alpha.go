@@ -67,6 +67,8 @@ func mountAlphaRoutes(mux *http.ServeMux, db *sql.DB) {
 
 	// UI pages
 	mux.HandleFunc("GET /alpha", handleAlphaLandingPage(db))
+	mux.HandleFunc("GET /alpha/digests", handleDigestsIndex(db))
+	mux.HandleFunc("GET /alpha/digests/{week}", handleDigestPage(db))
 	mux.HandleFunc("GET /alpha/{domain}", handleAlphaDomainPage(db))
 }
 

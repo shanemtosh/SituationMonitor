@@ -11,6 +11,23 @@ Invoked via `/geopolitical-alpha`. Run periodically (weekly or when major develo
 - Populate and update the geopolitical calendar
 - Review data streams for constraint changes
 
+## Weekly mode
+
+When invoked as part of the weekly combined run with no specific event trigger, the default behavior is:
+
+1. Scan all active situations and assessments in this domain for material changes since the last weekly run.
+2. Compare against last week's digest at `data/alpha/digests/{prev_week}/geopolitics.md` if present — what was forecast, what is still relevant, what shifted.
+3. Update assessments where evidence has moved the probability or weakened a fulcrum constraint.
+4. Create new assessments only for situations that cross the threshold for needing one (high item count, market-relevant, decision-point approaching).
+5. Perform Step C: stale cleanup.
+6. Write this week's digest (Step D).
+
+The weekly run prefers updating over creating. Don't flood the system with new assessments — focus on quality over coverage. If nothing material changed in a domain this week, the digest can be short and sections can be `_None._`.
+
+## Smoke-test mode
+
+If the environment variable `SMOKE_TEST=1` is set, log every API call and file write you would make but do NOT actually POST or write. Useful for validating the skill before enabling the systemd timer.
+
 ## The Papic Framework (analytical guide)
 
 **Core thesis:** Don't forecast based on what policymakers *want* (preferences) — forecast based on what they *can actually do* (constraints). Preferences are optional and subject to constraints; constraints are neither optional nor subject to preferences.
@@ -100,7 +117,7 @@ grep REEF_DATA_API_KEY ~/Code/reef-insights-v6/.env
 
 **2b. Create/update constraints via API**
 
-For each identified constraint:
+For each identified constraint (note `"domain": "geopolitics"` is required):
 ```bash
 curl -s -X POST http://localhost:8080/api/constraints -d '{
   "situation_id": SITUATION_ID,
@@ -211,6 +228,71 @@ After completing analysis, output a summary to the user:
 - Key upcoming calendar events
 - Any constraints that changed status
 - Recommendations for what to watch
+
+### Step C: Stale assessment cleanup (weekly mode)
+
+Walk active assessments for this domain and resolve those that have wound down. Be conservative — the goal is removing dead weight, not pruning aggressively.
+
+```bash
+curl -s "http://localhost:8080/api/assessments?domain=geopolitics&status=active" > /tmp/geo_active.json
+```
+
+For each assessment, mark as resolved if any of:
+- Underlying situation has `status: resolved`.
+- Most recent `probability_update` is older than 60 days AND no related items in the last 30 days.
+- Situation has effectively wound down based on the news flow.
+
+```bash
+curl -s -X PUT http://localhost:8080/api/assessments/{ID} -d '{
+  "status": "resolved",
+  "summary": "Resolved during weekly cleanup — situation has wound down."
+}'
+```
+
+Also delete calendar events with `status: passed` older than 90 days:
+```bash
+curl -s -X DELETE http://localhost:8080/api/calendar/{ID}
+```
+
+When in doubt, leave it. Log a one-line reason for each resolution.
+
+### Step D: Weekly digest (weekly mode)
+
+Write a markdown digest summarizing this week's analytical activity. Path:
+
+```bash
+WEEK=$(date +%G-W%V)   # e.g. 2026-W17
+DIGEST_DIR="/home/shane/Code/SituationMonitor/data/alpha/digests/$WEEK"
+mkdir -p "$DIGEST_DIR"
+DIGEST_FILE="$DIGEST_DIR/geopolitics.md"
+```
+
+Schema (use exactly this structure — empty sections write `_None._`, never omit a heading):
+
+```markdown
+# Geopolitics — Week {YYYY-Www}
+Generated: {ISO timestamp}
+
+## Probability shifts this week
+- {Assessment title}: {prior} → {posterior} ({Δ%}). {one-line reason}
+
+## New assessments
+- {title} — prior {p}, fulcrum: {constraint name}
+
+## Resolved this week
+- {title} — outcome: {short note}
+
+## New constraints
+- {name} ({type}, {direction}) — {one line}
+
+## Upcoming events (next 30 days)
+- {date} — {title} ({event_type}, {market_relevance})
+
+## What to watch
+{2-3 sentence forward look — only the most material items, no padding}
+```
+
+Use the same writing style and banned-pattern rules as the morning briefing. See `.claude/skills/daily-briefing.md` Step 5 for the full list.
 
 ## Writing style
 
